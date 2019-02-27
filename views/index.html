@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>KB-POC</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" rel="stylesheet"></link>
+  <link href="/css/style.css" rel="stylesheet"></link>
+  <script src="/libs/jquery-3.3.1.min.js"></script>
+  <script src="/libs/adapter.js"></script>
+  <script src="/libs/webrtc.js"></script>
+</head>
+
+<body>
+<div class="container mt-5">
+  <div class="container">
+    <div class="row">
+      <div class="col-sm">
+        <video id="localVideo" playsinline autoplay muted></video>
+
+        <input type="text" class="form-control" readonly />
+        <div class="box">
+          <button id="startButton1">Start</button>
+          <button id="callButton1">Call</button>
+          <button id="hangupButton1">Hang Up</button>
+        </div>
+      </div>
+      <div class="col-sm">
+        <video id="remoteVideo" playsinline autoplay></video>
+
+        <input type="text" class="form-control" readonly />
+        <div class="box">
+          <button id="startButton2">Start</button>
+          <button id="callButton2">Call</button>
+          <button id="hangupButton2">Hang Up</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <span>SDP Semantics:</span>
+    <select id="sdpSemantics">
+        <option selected value="">Default</option>
+        <option value="unified-plan">Unified Plan</option>
+        <option value="plan-b">Plan B</option>
+    </select>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+</body>
+</html>

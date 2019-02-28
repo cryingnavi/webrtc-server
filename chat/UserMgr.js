@@ -3,7 +3,7 @@ var User = require('./user');
 module.exports = {
   users: {},
   getUser: function (userId) {
-    return this.rooms[userId] || null;
+    return this.users[userId] || null;
   },
   createUser: function (userId, ws) {
     return new User(userId, ws);

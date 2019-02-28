@@ -149,11 +149,12 @@ utils.Event = utils.Extend(BaseKlass, {
 	initialize: function(){
 		this.listeners = { };
 	},
-	on: function(name, callback){
+	on: function(name, callback, context){
 		this.listeners || (this.listeners = { });
 		var listeners = this.listeners[name] || (this.listeners[name] = [ ]);
 		listeners.push({
-			callback: callback
+			callback: callback,
+			context: context
 		});
 		return this;
 	},
@@ -191,26 +192,26 @@ utils.Event = utils.Extend(BaseKlass, {
 			i = -1
 
 		if (listeners){
-			var len = listeners.length;
 			var ev = null;
+			var len = listeners.length;
 			switch (args.length) {
 				case 0:
 					if(len === 1){
-						return (ev = listeners[0]).callback.call(this);
+						return (ev = listeners[0]).callback.call(ev.context);
 					}
 					else{
 						while (++i < len){
-							(ev = listeners[i]).callback.call(this);
+							(ev = listeners[i]).callback.call(ev.context);
 						}
 						return this;
 					}
 				default:
 					if(len === 1){
-						return (ev = listeners[0]).callback.apply(this, args);
+						return (ev = listeners[0]).callback.apply(ev.context, args);
 					}
 					else{
 						while (++i < len){
-							(ev = listeners[i]).callback.apply(this, args);
+							(ev = listeners[i]).callback.apply(ev.context, args);
 						}
 						return this;
 					}
@@ -400,17 +401,17 @@ var Channeling = utils.Extend(utils.Event, {
 		var default_json = {
 			header: {
 				command: "",
-				userId: ""
+				token: ""
 			},
 			body: { }
 		};
 		return JSON.stringify(utils.apply(default_json, data));
 	},
-	ready: function (roomId) {
+	call: function (roomId) {
 		var data = this.serialize({
 			header: {
-				command: "ready",
-				userId: this.rtc.getUserId()
+				command: "call",
+				token: this.rtc.getTokenId()
 			},
 			body: {
 				roomId: roomId
@@ -422,15 +423,18 @@ var Channeling = utils.Extend(utils.Event, {
 	onMessage:  function (message) {
 		var data = JSON.parse(message.data);
 		var header = data.header;
+		var body = data.body;
 		var command = header.command.toUpperCase();
 
 		switch(command){
 			case "CONNECT":
-				this.fire("onConnect", header.body.token);
+				this.fire("onConnect", body.token);
+				break;
+
+			case "ON_CALL":
+				this.fire("onCall", body.answer);
 				break;
 		}
-
-		this.fire()
 	}
 });
 
@@ -439,7 +443,6 @@ var RTC = utils.Extend(utils.Event, {
 		RTC.base.initialize.call(this);
 		config = config || {}
 		this.config = {
-			userId: '',
 			url: '',
 			ws: '',
 			iceServers: null,
@@ -475,10 +478,9 @@ var RTC = utils.Extend(utils.Event, {
 		this.localMediaTarget = document.getElementById(this.config.localMediaTarget)
 		this.remoteMediaTarget = document.getElementById(this.config.remoteMediaTarget)
 
-		this.userId = this.config.userId;
+		this.token = '';
 		this.url = this.config.url;
 		this.ws = this.config.ws;
-		this.iceServers = [];
 		this.media = null;
     this.calling = null;
 
@@ -488,13 +490,15 @@ var RTC = utils.Extend(utils.Event, {
 		};
 
 		this.calling = new Channeling(this, this.ws);
-		this.calling.on("onConnect", this.onConnect)
+		this.calling.on("onConnect", this.onConnect, this);
+		this.calling.on("onCall", this.onCall, this);
 	},
-	getUserId: function () {
-		return this.userId;
+	getTokenId: function () {
+		return this.token;
 	},
-  createLocal: function () {
+  createLocalMedia: function () {
     navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
+			this.media = new Media(stream);
 			this.localMediaTarget.srcObject = stream;
       this.fire("createLocal", stream);
     }, this)).catch(utils.bind(function(e){
@@ -504,7 +508,7 @@ var RTC = utils.Extend(utils.Event, {
 			});
     }, this));
   },
-	ready: function (userId) {
+	ready: function () {
 		var xhr = request({
 			url: this.url + '/roomReady',
 			method: 'get'
@@ -517,13 +521,386 @@ var RTC = utils.Extend(utils.Event, {
 		}, this));
 	},
   call: function (roomId) {
-		this.calling.ready(roomId);
+		this.calling.call(roomId);
   },
 	hangUp: function () {
 
 	},
+	createPeer: function (token) {
+		var localStream = this.media.getStream();
+
+		var peerConfig = {
+			iceServers: this.config.iceServers,
+			dataChannelEnabled: this.config.dataChannelEnabled,
+			bandwidth: this.config.bandwidth,
+			preferCodec: this.config.preferCodec
+		};
+
+		this.peer = new Peer(token, localStream, peerConfig);
+		this.peer
+			.on("sendOfferSdp", this.sendOfferSdp, this)
+			.on("sendAnswerSdp", this.sendAnswerSdp, this)
+			.on("sendCandidate", this.sendCandidate, this)
+			.on("addRemoteStream", this.addRemoteStream, this)
+			.on("signalEnd", this.signalEnd, this)
+			.on("error", function(code, desc, data){
+				this.fire("error", code, desc, data);
+			}, this)
+			.on("stateChange", this._stateChange, this);
+
+		return this.peers[pid];
+	},
 	onConnect: function (token) {
-		console.log(token, this);
+		this.token = token
+	},
+	onCall: function (answer) {
+		this.peer = this.createPeer(answer);
+		this.peer.createOffer();
+	}
+});
+
+
+var Peer = utils.Extend(utils.Event, {
+	initialize: function(token, localStream, config){
+		Peer.base.initialize.call(this);
+
+		this.config = utils.apply({
+			iceServers: null,
+			dataChannelEnabled: false,
+			bandwidth: {
+				audio: 32,
+				video: 1500,
+				data: 1638400
+			},
+			preferCodec: {
+				audio: "opus",
+				video: "H264"
+			}
+		}, config);
+
+		this.localStream = localStream;
+		this.media = null;
+		this.connected = false;
+		this.oldStats = null;
+		this.statsReportTimer = null;
+
+		this.fractionLost = {
+			audio: [
+				{rating: 1, fromAflost: 0, toAflost: 50},
+				{rating: 2, fromAflost: 51, toAflost: 150},
+				{rating: 3, fromAflost: 151, toAflost: 250},
+				{rating: 4, fromAflost: 251, toAflost: 350},
+				{rating: 5, fromAflost: 351, toAflost: 9999999}
+			],
+			video: [
+				{rating: 1, fromAflost: 0, toAflost: 40},
+				{rating: 2, fromAflost: 41, toAflost: 55},
+				{rating: 3, fromAflost: 56, toAflost: 70},
+				{rating: 4, fromAflost: 71, toAflost: 90},
+				{rating: 5, fromAflost: 91, toAflost: 9999999}
+			]
+		};
+	},
+	setEvent: function(){
+		var pc = this.pc;
+		pc.onicecandidate = utils.bind(function(e){
+			if(e.candidate){
+				if(this.config.onlyTurn){
+					if(e.candidate.candidate.indexOf("relay") < 0){
+						return;
+					}
+				}
+
+				this.fire("sendCandidate", this.id, e.candidate);
+			}
+		}, this);
+
+		pc.onaddstream = utils.bind(function(e){
+			this.media = new Media(e.stream);
+			this.fire("addRemoteStream", this.id, this.uid, e.stream);
+		}, this);
+
+		pc.onsignalingstatechange = utils.bind(function(e){
+			this.fire("signalingstatechange", e);
+		}, this);
+
+		pc.oniceconnectionstatechange = utils.bind(function(e){
+			this.fire("iceconnectionstatechange", e);
+
+			var connectionState = e.target.iceConnectionState.toUpperCase(),
+				gatheringState = e.target.iceGatheringState.toUpperCase();
+
+			if(connectionState === "COMPLETED" || connectionState === "CONNECTED" || connectionState === "FAILED"){
+				this.fire("signalEnd", this.id);
+			}
+
+			if(connectionState === "FAILED"){
+				this._error("P4001", SDK_ERROR_CODE["P4001"]);
+			}
+			else if(connectionState === "CHECKING"){
+				this.fire("stateChange", "CHECKING", this.id, this.uid);
+				if(this.error_interval === null){
+					this.error_interval = window.setInterval(utils.bind(function(){
+								this._error("C4012", SDK_ERROR_CODE["C4012"]);
+								window.clearInterval(this.error_interval);
+								this.error_interval = null;
+								this.close();
+							}, this), 10000);
+					}
+				}
+				else if(connectionState === "COMPLETED" || connectionState === "CONNECTED"){
+					this.fire("stateChange", "SUCCESS", this.id, this.uid);
+				}
+				else{
+
+				}
+
+				this.fire("stateChange", "CONNECTED", this.id, this.uid);
+				this.connected = true;
+			}
+			else if(connectionState === "DISCONNECTED"){
+				this.fire("stateChange", "DISCONNECTED", this.id, this.uid);
+			}
+			else if(connectionState === "CLOSED"){
+				this.fire("stateChange", "CLOSED", this.id, this.uid);
+			}
+
+		}, this);
+
+		pc.onremovestream = utils.bind(function(e){
+			this.fire("removestream", e);
+		}, this);
+
+		pc.onclose = utils.bind(function(e){
+			this.fire("close", e);
+		}, this);
+	},
+	createPeerConnection: function(){
+		this.pc = new PeerConnection({
+			iceServers: this.config.iceServers
+		}, {
+			optional: [
+				{ DtlsSrtpKeyAgreement: true },
+				{ RtpDataChannels: false }
+			]
+		});
+
+		this.setEvent();
+		if(this.localStream){
+			this.pc.addStream(this.localStream);
+		}
+
+		if(utils.dataChannelSupport && this.config.dataChannelEnabled){
+			this.data = new Data(this);
+			this.data.on("open", utils.bind(function(){
+				this.call.playRtc.fire("addDataStream", this.id, this.uid, this.data);
+			}, this));
+		}
+		else{
+			//에러
+		}
+	},
+	replaceBandWidth: function(sdp){
+		if(!this.config.bandwidth){
+			return sdp;
+		}
+
+		var bundles = sdp.match(/a=group:BUNDLE (.*)?\r\n/);
+		if(bundles){
+			if(bundles[1]){
+				bundles = bundles[1].split(" ");
+			}
+			else{
+				return sdp;
+			}
+		}
+		else{
+			return sdp;
+		}
+
+		var ab = this.config.bandwidth.audio,
+			vb = this.config.bandwidth.video,
+			db = this.config.bandwidth.data,
+			vReg = new RegExp("a=rtpmap:(\\d+) " + this.config.preferCodec.video + "/(\\d+)");
+		sdp = sdp.replace(/b=AS([^\r\n]+\r\n)/g, "");
+
+		for(var i=0; i<bundles.length; i++){
+			if(bundles[i] === "audio" || bundles[i] === "sdparta_0"){
+				if(this.config.preferCodec.audio === "opus"){
+					sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (ab > 0 ? ab : 32) + "\r\n");
+				}
+			}else if(bundles[i] === "video" || bundles[i] === "sdparta_1"){
+				sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (vb > 0 ? vb : 1500) + "\r\n");
+				if (utils.browser.name === "chrome"){
+					sdp = sdp.replace(vReg, "a=rtpmap:$1 " + this.config.preferCodec.video + "/$2\r\na=fmtp:$1 x-google-start-bitrate=600; x-google-min-bitrate=600; x-google-max-bitrate=" + (vb > 0 ? vb : 1500) + "; x-google-max-quantization=56");
+				}
+			}else if(bundles[i] === "data" || bundles[i] === "sdparta_2"){
+				sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (db > 0 ? db : 1638400) + "\r\n");
+			}
+		}
+
+		return sdp;
+	},
+	replacePreferCodec: function(sdp, mLineReg, preferCodec){
+		var mLine,
+			newMLine = [],
+			sdpCodec,
+			mLineSplit,
+			reg = new RegExp("a=rtpmap:(\\d+) " + preferCodec + "/\\d+");
+
+		mLine = sdp.match(mLineReg);
+		if(!mLine){
+			return sdp;
+		}
+
+		sdpCodec = sdp.match(reg);
+		if(!sdpCodec){
+			return sdp;
+		}
+
+		mLine = mLine[0];
+		sdpCodec = sdpCodec[1];
+
+		mLineSplit = mLine.split(" ");
+		newMLine.push(mLineSplit[0]);
+		newMLine.push(mLineSplit[1]);
+		newMLine.push(mLineSplit[2]);
+		newMLine.push(sdpCodec);
+
+		for(var i=3; i<mLineSplit.length; i++){
+			if(mLineSplit[i] !== sdpCodec){
+				newMLine.push(mLineSplit[i]);
+			}
+		}
+
+		return sdp.replace(mLine, newMLine.join(" "));
+	},
+	_getConstraints: function(){
+		var constraints;
+		if(utils.browser.name === "firefox"){
+			constraints = {
+				offerToReceiveAudio: this.call.playRtc.userMedia.audio,
+				offerToReceiveVideo: this.call.playRtc.userMedia.video
+			};
+		}
+		else{
+			constraints = {
+				optional: [
+					{ VoiceActivityDetection: false	},
+					{ DtlsSrtpKeyAgreement: true}
+				],
+				mandatory: {
+					OfferToReceiveAudio: this.call.playRtc.userMedia.audio,
+					OfferToReceiveVideo: this.call.playRtc.userMedia.video
+				}
+			};
+		}
+		return constraints;
+	},
+	createOffer: function(){
+		this.createPeerConnection();
+		this.pc.createOffer(utils.bind(function(sessionDesc){
+			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
+			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
+			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
+
+			this.pc.setLocalDescription(sessionDesc);
+			this.fire("sendOfferSdp", this.id, sessionDesc);
+		}, this), utils.bind(function(){
+			//에러
+		}, this), this._getConstraints());
+	},
+	createAnswer: function(sdp){
+		if(!this.pc){
+			this.createPeerConnection();
+		}
+		var me = this,
+			pc = this.pc;
+
+		try{
+			pc.setRemoteDescription(new NativeRTCSessionDescription(sdp));
+		}
+		catch(e){
+			//에러
+			return;
+		}
+
+		pc.createAnswer(utils.bind(function(sessionDesc){
+			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
+			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
+			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
+
+			this.pc.setLocalDescription(sessionDesc);
+			this.fire("sendAnswerSdp", this.id, sessionDesc);
+		}, this), utils.bind(function(e){
+			//에러
+		}, this), this._getConstraints());
+	},
+	receiveAnwserSdp: function(sdp){
+		var pc = this.pc;
+		try{
+			pc.setRemoteDescription(new NativeRTCSessionDescription(sdp));
+		}
+		catch(e){
+			//에러
+		}
+	},
+	receiveCandidate: function(candidate){
+		if(!this.pc){
+			this.createPeerConnection();
+		}
+
+		var pc = this.pc;
+		try{
+			candidate = new NativeRTCIceCandidate(candidate);
+			pc.addIceCandidate(candidate);
+		}
+		catch(e){
+			//에러
+		}
+	},
+	close: function(){
+		if(this.pc){
+			this.pc.close();
+		}
+		this.pc = null;
+	},
+	getDataChannel: function(){
+		return this.data;
+	},
+	getMedia: function(){
+		if(this.media){
+			return this.media;
+		}
+		return null;
+	},
+	getPeerConnection: function(){
+		return this.pc;
+	},
+	getStats: function(fn){
+		if(utils.browser.name === "firefox"){
+			this.pc.getStats(null, utils.bind(function(res){
+				fn.call(this, res);
+			}, this), function(){ });
+		}
+		else{
+			this.pc.getStats(utils.bind(function(res){
+				var items = [ ];
+				res.result().forEach(function (result) {
+					var item = { };
+					result.names().forEach(function (name) {
+						item[name] = result.stat(name);
+					});
+					item.id = result.id;
+					item.type = result.type;
+					item.timestamp = result.timestamp;
+
+					items.push(item);
+				});
+
+				fn.call(this, items);
+			}, this));
+		}
 	}
 });
 

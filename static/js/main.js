@@ -2,20 +2,14 @@ const startButton1 = $('#startButton1');
 const callButton1 = $('#callButton1');
 const hangupButton1 = $('#hangupButton1');
 
+const startButton2 = $('#startButton2');
+const callButton2 = $('#callButton2');
+const hangupButton2 = $('#hangupButton2');
+
 const localVideo = $('#localVideo');
 const remoteVideo = $('#remoteVideo');
 
-function guid() {
-  function s4() {
-    return ((1 + Math.random()) * 0x10000 | 0).toString(16).substring(1);
-  }
-  return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
-}
-
-var userId = guid();
-
 var rtc = new RTC({
-  userId: userId,
   url: 'http://localhost:11200',
   ws: 'ws://localhost:11200',
   localMediaTarget: 'localVideo',
@@ -28,11 +22,11 @@ rtc.on("error", function(message){
 
 rtc.on("ready", function(roomId) {
   $("#roomId1").val(roomId);
-  this.call(roomId);
+  rtc.call(roomId);
 });
 
 startButton1.click(function () {
-  rtc.createLocal();
+  rtc.createLocalMedia();
 });
 
 callButton1.click(function () {
@@ -41,4 +35,12 @@ callButton1.click(function () {
 
 hangupButton1.click(function () {
   rtc.hangUp();
+});
+
+startButton2.click(function () {
+  rtc.createLocalMedia();
+});
+
+callButton2.click(function () {
+  rtc.call($("#roomId2").val());
 });

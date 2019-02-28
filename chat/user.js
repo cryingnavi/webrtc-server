@@ -1,11 +1,11 @@
-function User (userId, ws) {
-  this.userId = userId;
+function User (token, ws) {
+  this.token = token;
   this.ws = ws;
 }
 
 (function (_) {
-  _.getUserId = function () {
-    return this.userId;
+  _.getToken = function () {
+    return this.token;
   };
   _.send = function (message) {
     this.ws.sendUTF(JSON.stringify(message))

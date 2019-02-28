@@ -21,16 +21,26 @@ module.exports = {
 
       conn.on('message', function(message) {
         var data = JSON.parse(message.utf8Data);
-        if (data.header.command === "ready") {
+        if (data.header.command === "call") {
           var room = RoomMgr.getRoom(data.body.roomId);
           if (!room) {
             room = RoomMgr.createRoom(data.body.roomId);
-            room.addUser(UserMgr.getUser(data.header.userId));
+            room.addOfferUser(UserMgr.getUser(data.header.token));
           } else {
-            room.addUser(UserMgr.getUser(data.header.userId));
-          }
+            room.addAnswerUser(UserMgr.getUser(data.header.token));
 
-          console.log(room.users.length);
+            var offer = room.getOfferUser();
+            offer.ws.sendUTF(JSON.stringify({
+              header: {
+                command: 'on_call'
+              },
+              body: {
+                answer: room.getAnswerUser().getToken()
+              }
+            }));
+          }
+        } else if (data.header.command === "offer") {
+
         }
       });
 
@@ -38,7 +48,7 @@ module.exports = {
 
       });
 
-      con.sendUTF(JSON.stringify({
+      conn.sendUTF(JSON.stringify({
         header: {
           command: 'connect'
         },

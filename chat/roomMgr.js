@@ -6,9 +6,10 @@ module.exports = {
     return this.rooms[roomId] || null;
   },
   createRoom: function (roomId) {
-    return new Room(roomId);
+    this.rooms[roomId] = new Room(roomId);
+    return this.rooms[roomId];
   },
-  deleteRoom: function (){
-
+  deleteRoom: function (roomId){
+    delete this.rooms[roomId];
   }
 };

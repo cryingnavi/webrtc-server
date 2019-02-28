@@ -5,7 +5,6 @@ const hangupButton1 = $('#hangupButton1');
 const localVideo = $('#localVideo');
 const remoteVideo = $('#remoteVideo');
 
-
 function guid() {
   function s4() {
     return ((1 + Math.random()) * 0x10000 | 0).toString(16).substring(1);
@@ -28,6 +27,7 @@ rtc.on("error", function(message){
 });
 
 rtc.on("ready", function(roomId) {
+  $("#roomId1").val(roomId);
   this.call(roomId);
 });
 

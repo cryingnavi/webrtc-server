@@ -15,12 +15,17 @@ module.exports = {
       var conn = request.accept(null, request.origin);
 
       conn.on('message', function(message) {
-        var data = JSON.stringify(message.utf8Data);
+        var data = JSON.parse(message.utf8Data);
         if (data.header.command === "connect") {
-          if (RoomMgr.getRoom(data.body.roomId)) {
-            var room = RoomMgr.createRoom(data.body.roomId);
+          var room = RoomMgr.getRoom(data.body.roomId);
+          if (!room) {
+            room = RoomMgr.createRoom(data.body.roomId);
+            room.addUser(new User(data.header.userId, conn));
+          } else {
             room.addUser(new User(data.header.userId, conn));
           }
+
+          console.log(room.users.length);
         }
       });
 

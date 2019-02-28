@@ -149,12 +149,11 @@ utils.Event = utils.Extend(BaseKlass, {
 	initialize: function(){
 		this.listeners = { };
 	},
-	on: function(name, callback, context){
+	on: function(name, callback){
 		this.listeners || (this.listeners = { });
 		var listeners = this.listeners[name] || (this.listeners[name] = [ ]);
 		listeners.push({
-			callback: callback,
-			context: context
+			callback: callback
 		});
 		return this;
 	},
@@ -407,10 +406,10 @@ var Channeling = utils.Extend(utils.Event, {
 		};
 		return JSON.stringify(utils.apply(default_json, data));
 	},
-	connect: function (roomId) {
+	ready: function (roomId) {
 		var data = this.serialize({
 			header: {
-				command: "connect",
+				command: "ready",
 				userId: this.rtc.getUserId()
 			},
 			body: {
@@ -422,6 +421,16 @@ var Channeling = utils.Extend(utils.Event, {
 	},
 	onMessage:  function (message) {
 		var data = JSON.parse(message.data);
+		var header = data.header;
+		var command = header.command.toUpperCase();
+
+		switch(command){
+			case "CONNECT":
+				this.fire("onConnect", header.body.token);
+				break;
+		}
+
+		this.fire()
 	}
 });
 
@@ -479,6 +488,7 @@ var RTC = utils.Extend(utils.Event, {
 		};
 
 		this.calling = new Channeling(this, this.ws);
+		this.calling.on("onConnect", this.onConnect)
 	},
 	getUserId: function () {
 		return this.userId;
@@ -507,10 +517,13 @@ var RTC = utils.Extend(utils.Event, {
 		}, this));
 	},
   call: function (roomId) {
-		this.calling.connect(roomId);
+		this.calling.ready(roomId);
   },
 	hangUp: function () {
-		
+
+	},
+	onConnect: function (token) {
+		console.log(token, this);
 	}
 });
 

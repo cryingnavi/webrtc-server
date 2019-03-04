@@ -150,7 +150,6 @@ utils.Event = utils.Extend(BaseKlass, {
 		this.listeners = { };
 	},
 	on: function(name, callback, context){
-		this.listeners || (this.listeners = { });
 		var listeners = this.listeners[name] || (this.listeners[name] = [ ]);
 		listeners.push({
 			callback: callback,
@@ -189,7 +188,7 @@ utils.Event = utils.Extend(BaseKlass, {
 
 		var args = Array.prototype.slice.call(arguments, 1),
 			listeners = this.listeners[name],
-			i = -1
+			i = -1;
 
 		if (listeners){
 			var ev = null;
@@ -293,16 +292,16 @@ function request(options){
 				res = xhr.responseText;
 
 			if (xhr.readyState === 4 && xhr.status === 200 && res) {
-				try{
+				try {
 					res = JSON.parse(res);
-					resolve(res)
+					resolve(res);
 				}
-				catch(e){
-					reject(e)
+				catch(e) {
+					reject(e);
 				}
 			}
 			else if (xhr.readyState === 4 && xhr.status !== 200) {
-				reject(e)
+				reject(e);
 			}
 		};
 
@@ -385,7 +384,7 @@ var Channeling = utils.Extend(utils.Event, {
 		this.socket.on("close", utils.bind(function(e){
 		}, this));
 		this.socket.on("error", utils.bind(function(e){
-			//this.fire("error", "C4007", SDK_ERROR_CODE["C4007"]);
+
 		}, this));
 		this.socket.on("message", this.onMessage, this);
 	},
@@ -394,7 +393,7 @@ var Channeling = utils.Extend(utils.Event, {
 			this.socket.send(data);
 		}
 		else{
-			//this.fire("error", "C4003", SDK_ERROR_CODE["C4003"]);
+
 		}
 	},
 	serialize: function(data){
@@ -411,10 +410,66 @@ var Channeling = utils.Extend(utils.Event, {
 		var data = this.serialize({
 			header: {
 				command: "call",
-				token: this.rtc.getTokenId()
+				token: this.rtc.getOfferTokenId()
 			},
 			body: {
 				roomId: roomId
+			}
+		});
+
+		this.send(data);
+	},
+	sendOfferSdp: function (sdp) {
+		var data = this.serialize({
+			header: {
+				command: "offer_sdp",
+				token: this.rtc.getOfferTokenId()
+			},
+			body: {
+				roomId: roomId,
+				sdp: sdp
+			}
+		});
+
+		this.send(data);
+	},
+	sendAnswerSdp: function (sdp) {
+		var data = this.serialize({
+			header: {
+				command: "answer_sdp",
+				token: this.rtc.getAnswerTokenId()
+			},
+			body: {
+				roomId: roomId,
+				sdp: sdp
+			}
+		});
+
+		this.send(data);
+	},
+	sendOfferCandidate: function (candidate) {
+		var data = this.serialize({
+			header: {
+				command: "offer_candidate",
+				token: this.rtc.getOfferTokenId()
+			},
+			body: {
+				roomId: roomId,
+				candidate: candidate
+			}
+		});
+
+		this.send(data);
+	},
+	sendAnswerCandidate: function (candidate) {
+		var data = this.serialize({
+			header: {
+				command: "answer_candidate",
+				token: this.rtc.getAnswerTokenId()
+			},
+			body: {
+				roomId: roomId,
+				candidate: candidate
 			}
 		});
 
@@ -434,6 +489,18 @@ var Channeling = utils.Extend(utils.Event, {
 			case "ON_CALL":
 				this.fire("onCall", body.answer);
 				break;
+			case "ON_OFFER_SDP":
+				this.fire("onOfferSdp", body.sdp);
+				break;
+			case "ON_ANSWER_SDP":
+				this.fire("onAnswerSdp", body.sdp);
+				break;
+			case "ON_OFFER_CANDIDATE":
+				this.fire("onOfferCandidate", body.sdp);
+				break;
+			case "ON_ANSWER_CANDIDATE":
+				this.fire("onAnswerCandidate", body.sdp);
+				break;
 		}
 	}
 });
@@ -441,7 +508,7 @@ var Channeling = utils.Extend(utils.Event, {
 var RTC = utils.Extend(utils.Event, {
 	initialize: function(config){
 		RTC.base.initialize.call(this);
-		config = config || {}
+		config = config || {};
 		this.config = {
 			url: '',
 			ws: '',
@@ -452,7 +519,7 @@ var RTC = utils.Extend(utils.Event, {
 				audio: true,
 				video: true
 			},
-			data: true,
+			dataChannelEnabled: true,
 			bandwidth: {
 				video: 1500,
 				data: 1638400
@@ -462,27 +529,30 @@ var RTC = utils.Extend(utils.Event, {
 				video: "H264"
 			},
 			onlyTurn: false
-		}
+		};
 		utils.apply(this.config, config);
 
 		if (!this.config.localMediaTarget) {
-			alert('Error!!')
+			alert('Error!!');
 			return;
 		}
 
-    if(!this.config.userMedia.audio && !this.config.userMedia.video && !this.config.data){
-			alert('Error!!')
+    if(!this.config.userMedia.audio && !this.config.userMedia.video && !this.config.dataChannelEnabled){
+			alert('Error!!');
 			return;
 		}
 
-		this.localMediaTarget = document.getElementById(this.config.localMediaTarget)
-		this.remoteMediaTarget = document.getElementById(this.config.remoteMediaTarget)
+		this.localMediaTarget = document.getElementById(this.config.localMediaTarget);
+		this.remoteMediaTarget = document.getElementById(this.config.remoteMediaTarget);
 
-		this.token = '';
 		this.url = this.config.url;
 		this.ws = this.config.ws;
 		this.media = null;
     this.calling = null;
+		this.offerToken = '';
+		this.offer = null;
+		this.answerToken = '';
+		this.answer = null;
 
 		this.userMedia = {
 			audio: this.config.userMedia.audio,
@@ -492,9 +562,16 @@ var RTC = utils.Extend(utils.Event, {
 		this.calling = new Channeling(this, this.ws);
 		this.calling.on("onConnect", this.onConnect, this);
 		this.calling.on("onCall", this.onCall, this);
+		this.calling.on("onOfferSdp", this.onOfferSdp, this);
+		this.calling.on("onAnswerSdp", this.onAnswerSdp, this);
+		this.calling.on("onOfferCandidate", this.onOfferCandidate, this);
+		this.calling.on("onAnswerCandidate", this.onAnswerCandidate, this);
 	},
-	getTokenId: function () {
-		return this.token;
+	getOfferTokenId: function () {
+		return this.offerToken;
+	},
+	getAnswerTokenId: function () {
+		return this.answerToken;
 	},
   createLocalMedia: function () {
     navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
@@ -526,7 +603,7 @@ var RTC = utils.Extend(utils.Event, {
 	hangUp: function () {
 
 	},
-	createPeer: function (token) {
+	createPeer: function (type) {
 		var localStream = this.media.getStream();
 
 		var peerConfig = {
@@ -536,26 +613,59 @@ var RTC = utils.Extend(utils.Event, {
 			preferCodec: this.config.preferCodec
 		};
 
-		this.peer = new Peer(token, localStream, peerConfig);
-		this.peer
-			.on("sendOfferSdp", this.sendOfferSdp, this)
-			.on("sendAnswerSdp", this.sendAnswerSdp, this)
-			.on("sendCandidate", this.sendCandidate, this)
-			.on("addRemoteStream", this.addRemoteStream, this)
-			.on("signalEnd", this.signalEnd, this)
-			.on("error", function(code, desc, data){
-				this.fire("error", code, desc, data);
-			}, this)
-			.on("stateChange", this._stateChange, this);
+		var token = '';
+		if (type === 'offer') {
+			token = this.getOfferTokenId();
+		} else {
+			token = this.getAnswerTokenId();
+		}
 
-		return this.peers[pid];
+		var peer = new Peer(token, localStream, peerConfig);
+		peer.on("sendOfferSdp", this.sendOfferSdp, this);
+		peer.on("sendAnswerSdp", this.sendAnswerSdp, this);
+		peer.on("addRemoteStream", this.addRemoteStream, this);
+		peer.on("signalEnd", this.signalEnd, this);
+		peer.on("error", function(code, desc, data){
+			this.fire("error", code, desc, data);
+		}, this);
+		peer.on("stateChange", this._stateChange, this);
+
+		if (type === 'offer') {
+			peer.on("sendCandidate", this.sendOfferCandidate, this);
+		} else {
+			peer.on("sendCandidate", this.sendAnswerCandidate, this);
+		}
+		return peer;
 	},
-	onConnect: function (token) {
-		this.token = token
+	onConnect: function (offerToken) {
+		this.offerToken = offerToken;
 	},
-	onCall: function (answer) {
-		this.peer = this.createPeer(answer);
-		this.peer.createOffer();
+	onCall: function (answerToken) {
+		this.offer = this.createPeer();
+		this.offer.createOffer();
+		this.answerToken = answerToken;
+	},
+	onOfferSdp: function (sdp) {
+		this.answer = this.createPeer();
+		this.answer.createAnswer(sdp);
+	},
+	onAnswerSdp: function (sdp) {
+		this.offer.receiveAnwserSdp(sdp);
+	},
+	onOfferCandidate: function (candidate) {
+		this.answer.receiveCandidate(candidate);
+	},
+	onAnswerCandidate: function (candidate) {
+		this.offer.receiveCandidate(candidate);
+	},
+	sendOfferSdp: function (sdp) {
+		this.calling.sendOfferSdp(sdp);
+	},
+	sendAnswerSdp: function (sdp) {
+		this.calling.sendAnswerSdp(sdp);
+	},
+	sendCandidate: function (candidate) {
+		this.calling.sendCandidate(candidate);
 	}
 });
 
@@ -626,45 +736,6 @@ var Peer = utils.Extend(utils.Event, {
 
 		pc.oniceconnectionstatechange = utils.bind(function(e){
 			this.fire("iceconnectionstatechange", e);
-
-			var connectionState = e.target.iceConnectionState.toUpperCase(),
-				gatheringState = e.target.iceGatheringState.toUpperCase();
-
-			if(connectionState === "COMPLETED" || connectionState === "CONNECTED" || connectionState === "FAILED"){
-				this.fire("signalEnd", this.id);
-			}
-
-			if(connectionState === "FAILED"){
-				this._error("P4001", SDK_ERROR_CODE["P4001"]);
-			}
-			else if(connectionState === "CHECKING"){
-				this.fire("stateChange", "CHECKING", this.id, this.uid);
-				if(this.error_interval === null){
-					this.error_interval = window.setInterval(utils.bind(function(){
-								this._error("C4012", SDK_ERROR_CODE["C4012"]);
-								window.clearInterval(this.error_interval);
-								this.error_interval = null;
-								this.close();
-							}, this), 10000);
-					}
-				}
-				else if(connectionState === "COMPLETED" || connectionState === "CONNECTED"){
-					this.fire("stateChange", "SUCCESS", this.id, this.uid);
-				}
-				else{
-
-				}
-
-				this.fire("stateChange", "CONNECTED", this.id, this.uid);
-				this.connected = true;
-			}
-			else if(connectionState === "DISCONNECTED"){
-				this.fire("stateChange", "DISCONNECTED", this.id, this.uid);
-			}
-			else if(connectionState === "CLOSED"){
-				this.fire("stateChange", "CLOSED", this.id, this.uid);
-			}
-
 		}, this);
 
 		pc.onremovestream = utils.bind(function(e){
@@ -805,7 +876,7 @@ var Peer = utils.Extend(utils.Event, {
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
 			this.pc.setLocalDescription(sessionDesc);
-			this.fire("sendOfferSdp", this.id, sessionDesc);
+			this.fire("sendOfferSdp", sessionDesc);
 		}, this), utils.bind(function(){
 			//에러
 		}, this), this._getConstraints());
@@ -831,7 +902,7 @@ var Peer = utils.Extend(utils.Event, {
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
 			this.pc.setLocalDescription(sessionDesc);
-			this.fire("sendAnswerSdp", this.id, sessionDesc);
+			this.fire("sendAnswerSdp", sessionDesc);
 		}, this), utils.bind(function(e){
 			//에러
 		}, this), this._getConstraints());
@@ -903,6 +974,143 @@ var Peer = utils.Extend(utils.Event, {
 		}
 	}
 });
+
+
+var Media = (function(){
+	var Recorder = function(stream, type){
+		this.type = type;
+		this.stream = stream;
+		this.recordingCb = null;
+		this.stopCb = null;
+
+		this.mr = new MediaRecorder(this.stream);
+		this.array = [];
+		this.mr.ondataavailable = utils.bind(function(e){
+			this.array.push(e.data);
+			if(this.recordingCb){
+				this.recordingCb(e.data);
+			}
+		}, this);
+
+		this.mr.onstop = utils.bind(function(e){
+			var encodeData = new Blob(this.array, {type: this.type});
+			if(this.stopCb){
+				this.stopCb(encodeData);
+			}
+			this.stopCb = null;
+		}, this);
+	};
+
+	Recorder.prototype.start = function(recordingCb){
+		this.recordingCb = recordingCb;
+		this.mr.start(3000);
+	};
+
+	Recorder.prototype.stop = function(stopCb){
+		this.stopCb = stopCb;
+		this.mr.stop();
+	};
+
+	return utils.Extend(utils.Event, {
+		initialize: function(stream){
+			Media.base.initialize.call(this);
+			this.stream = stream;
+			this.recorder = null;
+		},
+		createRecorder: function(){
+			if(!utils.mediaRecorderSupport){
+				Logger.warn("cdm", {
+					klass: "Media",
+					method: "createRecorder",
+					message: "Media Recorder is not suporrted"
+				});
+			}
+
+			var recorder = null,
+				stream = this.getStream();
+				videoTrack = this.getVideoTrack();
+
+			if(videoTrack){
+				recorder = new Recorder(stream, "video/webm");
+			}
+			else{
+				recorder = new Recorder(stream, "audio/ogg; codecs=opus");
+			}
+
+			return recorder;
+		},
+
+		record: function(recordingCb){
+			if(this.recorder){
+				return;
+			}
+			this.recorder = this.createRecorder();
+			if(this.recorder){
+				this.recorder.start(recordingCb);
+			}
+		},
+		recordStop: function(stopCb){
+			if(!this.recorder){
+				return;
+			}
+
+			this.recorder.stop(stopCb);
+			this.recorder = null;
+		},
+		getStream: function(){
+			return this.stream;
+		},
+		getVideoTrack: function(){
+			var s = this.getStream(),
+				v = s.getVideoTracks();
+
+			return v.length > 0 ? v[0] : null;
+		},
+		getAudioTrack: function(){
+			var s = this.getStream(),
+				a = s.getAudioTracks();
+
+			return a.length > 0 ? a[0] : null;
+		},
+		audioMute: function(enabled){
+			var a = this.getAudioTrack();
+			if(a){
+				a.enabled = enabled;
+				return true;
+			}
+			return false;
+		},
+		videoMute: function(enabled){
+			var v  = this.getVideoTrack();
+			if(v){
+				v.enabled = enabled;
+				return true;
+			}
+			return false;
+		},
+		mute: function(enabled){
+			this.audioMute(enabled);
+			this.videoMute(enabled);
+		},
+		stop: function(){
+			var v = this.getVideoTrack();
+			var a = this.getAudioTrack();
+
+			if(v){
+				v.stop();
+			}
+
+			if(a){
+				a.stop();
+			}
+
+			//chrome 47 deprecation.
+			if(this.stream.stop){
+				this.stream.stop();
+			}
+		}
+	});
+})();
 
 window.RTC = RTC;
 });

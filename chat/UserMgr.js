@@ -6,7 +6,8 @@ module.exports = {
     return this.users[userId] || null;
   },
   createUser: function (userId, ws) {
-    return new User(userId, ws);
+    var user = this.users[userId] = new User(userId, ws);
+    return user;
   },
   deleteUser: function (){
 

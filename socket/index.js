@@ -17,12 +17,15 @@ module.exports = {
 
       var uuid = uuidv4();
       conn.uuid = uuid;
-      UserMgr.createUser(uuid, conn)
+      UserMgr.createUser(uuid, conn);
 
       conn.on('message', function(message) {
+
+        console.log(message.utf8Data);
+
         var data = JSON.parse(message.utf8Data);
+        var room = RoomMgr.getRoom(data.body.roomId);
         if (data.header.command === "call") {
-          var room = RoomMgr.getRoom(data.body.roomId);
           if (!room) {
             room = RoomMgr.createRoom(data.body.roomId);
             room.addOfferUser(UserMgr.getUser(data.header.token));
@@ -30,17 +33,55 @@ module.exports = {
             room.addAnswerUser(UserMgr.getUser(data.header.token));
 
             var offer = room.getOfferUser();
-            offer.ws.sendUTF(JSON.stringify({
+            offer.send({
               header: {
                 command: 'on_call'
               },
               body: {
                 answer: room.getAnswerUser().getToken()
               }
-            }));
+            });
           }
-        } else if (data.header.command === "offer") {
-
+        } else if (data.header.command === "offer_sdp") {
+          var answer = room.getAnswerUser();
+          answer.send({
+            header: {
+              command: 'on_offer_sdp'
+            },
+            body: {
+              sdp: data.body.sdp
+            }
+          });
+        } else if (data.header.command === "answer_sdp") {
+          var offer = room.getOfferUser();
+          offer.send({
+            header: {
+              command: 'on_answer_sdp'
+            },
+            body: {
+              sdp: data.body.sdp
+            }
+          });
+        } else if (data.header.command === "offer_candidate") {
+          var answer = room.getAnswerUser();
+          answer.send({
+            header: {
+              command: 'on_offer_candidate'
+            },
+            body: {
+              sdp: data.body.sdp
+            }
+          });
+        } else if (data.header.command === "answer_candidate") {
+          var offer = room.getOfferUser();
+          offer.send({
+            header: {
+              command: 'on_answer_candidate'
+            },
+            body: {
+              sdp: data.body.sdp
+            }
+          });
         }
       });
 

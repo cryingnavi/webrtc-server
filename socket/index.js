@@ -25,6 +25,8 @@ module.exports = {
 
         var data = JSON.parse(message.utf8Data);
         var room = RoomMgr.getRoom(data.body.roomId);
+        var offer = null;
+        var answer = null;
         if (data.header.command === "call") {
           if (!room) {
             room = RoomMgr.createRoom(data.body.roomId);
@@ -32,18 +34,28 @@ module.exports = {
           } else {
             room.addAnswerUser(UserMgr.getUser(data.header.token));
 
-            var offer = room.getOfferUser();
+            offer = room.getOfferUser();
             offer.send({
               header: {
-                command: 'on_call'
+                command: 'on_call_offer'
               },
               body: {
                 answer: room.getAnswerUser().getToken()
               }
             });
+
+            answer = room.getAnswerUser();
+            answer.send({
+              header: {
+                command: 'on_call_answer'
+              },
+              body: {
+                offer: room.getOfferUser().getToken()
+              }
+            });
           }
         } else if (data.header.command === "offer_sdp") {
-          var answer = room.getAnswerUser();
+          answer = room.getAnswerUser();
           answer.send({
             header: {
               command: 'on_offer_sdp'
@@ -53,7 +65,7 @@ module.exports = {
             }
           });
         } else if (data.header.command === "answer_sdp") {
-          var offer = room.getOfferUser();
+          offer = room.getOfferUser();
           offer.send({
             header: {
               command: 'on_answer_sdp'
@@ -63,23 +75,23 @@ module.exports = {
             }
           });
         } else if (data.header.command === "offer_candidate") {
-          var answer = room.getAnswerUser();
+          answer = room.getAnswerUser();
           answer.send({
             header: {
               command: 'on_offer_candidate'
             },
             body: {
-              sdp: data.body.sdp
+              candidate: data.body.candidate
             }
           });
         } else if (data.header.command === "answer_candidate") {
-          var offer = room.getOfferUser();
+          offer = room.getOfferUser();
           offer.send({
             header: {
               command: 'on_answer_candidate'
             },
             body: {
-              sdp: data.body.sdp
+              candidate: data.body.candidate
             }
           });
         }

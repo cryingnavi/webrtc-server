@@ -13,7 +13,7 @@ var rtc = new RTC({
   url: 'http://localhost:11200',
   ws: 'ws://localhost:11200',
   localMediaTarget: 'localVideo',
-  removeMediaTarget: 'remoteVideo',
+  remoteMediaTarget: 'remoteVideo',
   'iceServers': [
     {
       'urls': 'stun:stun.l.google.com:19302'

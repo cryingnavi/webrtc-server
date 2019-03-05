@@ -410,7 +410,7 @@ var Channeling = utils.Extend(utils.Event, {
 		var data = this.serialize({
 			header: {
 				command: "call",
-				token: this.rtc.getOfferTokenId()
+				token: this.rtc.getTokenId()
 			},
 			body: {
 				roomId: roomId
@@ -469,7 +469,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				candidate: candidate
+				candidate: JSON.stringify(candidate)
 			}
 		});
 
@@ -486,20 +486,23 @@ var Channeling = utils.Extend(utils.Event, {
 				this.fire("onConnect", body.token);
 				break;
 
-			case "ON_CALL":
-				this.fire("onCall", body.answer);
+			case "ON_CALL_OFFER":
+				this.fire("onCallOffer", body.answer);
+				break;
+			case "ON_CALL_ANSWER":
+				this.fire("onCallAnswer", body.offer);
 				break;
 			case "ON_OFFER_SDP":
-				this.fire("onOfferSdp", body.sdp);
+				this.fire("onOfferSdp", JSON.parse(body.sdp));
 				break;
 			case "ON_ANSWER_SDP":
-				this.fire("onAnswerSdp", body.sdp);
+				this.fire("onAnswerSdp", JSON.parse(body.sdp));
 				break;
 			case "ON_OFFER_CANDIDATE":
-				this.fire("onOfferCandidate", body.sdp);
+				this.fire("onOfferCandidate", JSON.parse(body.candidate));
 				break;
 			case "ON_ANSWER_CANDIDATE":
-				this.fire("onAnswerCandidate", body.sdp);
+				this.fire("onAnswerCandidate", JSON.parse(body.candidate));
 				break;
 		}
 	}
@@ -547,8 +550,10 @@ var RTC = utils.Extend(utils.Event, {
 
 		this.url = this.config.url;
 		this.ws = this.config.ws;
-		this.media = null;
+		this.localMedia = null;
+		this.remoteMedia = null;
     this.calling = null;
+		this.token = '';
 		this.offerToken = '';
 		this.offer = null;
 		this.answerToken = '';
@@ -562,11 +567,15 @@ var RTC = utils.Extend(utils.Event, {
 
 		this.calling = new Channeling(this, this.ws);
 		this.calling.on("onConnect", this.onConnect, this);
-		this.calling.on("onCall", this.onCall, this);
+		this.calling.on("onCallOffer", this.onCallOffer, this);
+		this.calling.on("onCallAnswer", this.onCallAnswer, this);
 		this.calling.on("onOfferSdp", this.onOfferSdp, this);
 		this.calling.on("onAnswerSdp", this.onAnswerSdp, this);
 		this.calling.on("onOfferCandidate", this.onOfferCandidate, this);
 		this.calling.on("onAnswerCandidate", this.onAnswerCandidate, this);
+	},
+	getTokenId: function () {
+		return this.token;
 	},
 	getOfferTokenId: function () {
 		return this.offerToken;
@@ -579,7 +588,7 @@ var RTC = utils.Extend(utils.Event, {
 	},
   createLocalMedia: function () {
     navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
-			this.media = new Media(stream);
+			this.localMedia = new Media(stream);
 			this.localMediaTarget.srcObject = stream;
       this.fire("createLocal", stream);
     }, this)).catch(utils.bind(function(e){
@@ -609,7 +618,7 @@ var RTC = utils.Extend(utils.Event, {
 
 	},
 	createPeer: function (type) {
-		var localStream = this.media.getStream();
+		var localStream = this.localMedia.getStream();
 
 		var peerConfig = {
 			iceServers: this.config.iceServers,
@@ -618,40 +627,39 @@ var RTC = utils.Extend(utils.Event, {
 			preferCodec: this.config.preferCodec
 		};
 
-		var token = '';
-		if (type === 'offer') {
-			token = this.getOfferTokenId();
-		} else {
-			token = this.getAnswerTokenId();
-		}
-
-		var peer = new Peer(this, token, localStream, peerConfig);
+		var peer = new Peer(this, localStream, peerConfig);
 		peer.on("sendOfferSdp", this.sendOfferSdp, this);
 		peer.on("sendAnswerSdp", this.sendAnswerSdp, this);
 		peer.on("addRemoteStream", this.addRemoteStream, this);
-		peer.on("signalEnd", this.signalEnd, this);
+		//peer.on("signalEnd", this.signalEnd, this);
 		peer.on("error", function(code, desc, data){
-			this.fire("error", code, desc, data);
+			//this.fire("error", code, desc, data);
 		}, this);
 		peer.on("stateChange", this._stateChange, this);
 
 		if (type === 'offer') {
+			console.log('offer ==========');
 			peer.on("sendCandidate", this.sendOfferCandidate, this);
 		} else {
+			console.log('answer =========');
 			peer.on("sendCandidate", this.sendAnswerCandidate, this);
 		}
 		return peer;
 	},
-	onConnect: function (offerToken) {
+	onConnect: function (token) {
+		this.token = token
+	},
+	onCallOffer: function (answerToken) {
+		this.answerToken = answerToken;
+
+		this.offer = this.createPeer('offer');
+		this.offer.createOffer();
+	},
+	onCallAnswer: function (offerToken){
 		this.offerToken = offerToken;
 	},
-	onCall: function (answerToken) {
-		this.offer = this.createPeer();
-		this.offer.createOffer();
-		this.answerToken = answerToken;
-	},
 	onOfferSdp: function (sdp) {
-		this.answer = this.createPeer();
+		this.answer = this.createPeer('answer');
 		this.answer.createAnswer(sdp);
 	},
 	onAnswerSdp: function (sdp) {
@@ -669,14 +677,22 @@ var RTC = utils.Extend(utils.Event, {
 	sendAnswerSdp: function (sdp) {
 		this.calling.sendAnswerSdp(sdp);
 	},
-	sendCandidate: function (candidate) {
-		this.calling.sendCandidate(candidate);
+	sendOfferCandidate: function (candidate) {
+		this.calling.sendOfferCandidate(candidate);
+	},
+	sendAnswerCandidate: function (candidate) {
+		this.calling.sendAnswerCandidate(candidate);
+	},
+	addRemoteStream: function (stream) {
+		this.remoteMedia = new Media(stream);
+		this.remoteMediaTarget.srcObject = stream;
+		this.fire("createRemote", stream);
 	}
 });
 
 
 var Peer = utils.Extend(utils.Event, {
-	initialize: function(obj, token, localStream, config){
+	initialize: function(obj, localStream, config){
 		Peer.base.initialize.call(this);
 
 		this.config = utils.apply({
@@ -695,39 +711,23 @@ var Peer = utils.Extend(utils.Event, {
 
 		this.call = obj;
 		this.localStream = localStream;
-		this.media = null;
 		this.connected = false;
 		this.oldStats = null;
 		this.statsReportTimer = null;
-
-		this.fractionLost = {
-			audio: [
-				{rating: 1, fromAflost: 0, toAflost: 50},
-				{rating: 2, fromAflost: 51, toAflost: 150},
-				{rating: 3, fromAflost: 151, toAflost: 250},
-				{rating: 4, fromAflost: 251, toAflost: 350},
-				{rating: 5, fromAflost: 351, toAflost: 9999999}
-			],
-			video: [
-				{rating: 1, fromAflost: 0, toAflost: 40},
-				{rating: 2, fromAflost: 41, toAflost: 55},
-				{rating: 3, fromAflost: 56, toAflost: 70},
-				{rating: 4, fromAflost: 71, toAflost: 90},
-				{rating: 5, fromAflost: 91, toAflost: 9999999}
-			]
-		};
 	},
 	setEvent: function(){
 		var pc = this.pc;
 		pc.onicecandidate = utils.bind(function(e){
 			if(e.candidate){
+				/*
 				if(this.config.onlyTurn){
 					if(e.candidate.candidate.indexOf("relay") < 0){
 						return;
 					}
 				}
+				*/
 
-				this.fire("sendCandidate", this.id, e.candidate);
+				this.fire("sendCandidate", e.candidate);
 			}
 		}, this);
 /*
@@ -736,16 +736,23 @@ var Peer = utils.Extend(utils.Event, {
 			this.fire("addRemoteStream", this.id, this.uid, e.stream);
 		}, this);
 */
-		pc.track = utils.bind(function(e){
-			this.media = new Media(e.stream);
-			this.fire("addRemoteStream", this.id, this.uid, e.stream);
+		pc.ontrack = utils.bind(function(e){
+			console.log(e.streams);
+			//this.media = new Media(e.stream);
+			this.fire("addRemoteStream", e.streams[0]);
 		}, this);
 
 		pc.onsignalingstatechange = utils.bind(function(e){
+			console.log('=====');
+			console.log(e);
+			console.log('=====');
 			this.fire("signalingstatechange", e);
 		}, this);
 
 		pc.oniceconnectionstatechange = utils.bind(function(e){
+			console.log('----');
+			console.log(e);
+			console.log('----');
 			this.fire("iceconnectionstatechange", e);
 		}, this);
 
@@ -764,7 +771,13 @@ var Peer = utils.Extend(utils.Event, {
 
 		this.setEvent();
 		if(this.localStream){
-			this.pc.addStream(this.localStream);
+			var me = this;
+			//this.pc.addTrack(this.localStream);
+			//this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
+			this.localStream.getTracks().forEach(function (track) {
+				console.log(track);
+				me.pc.addTrack(track, me.localStream);
+			});
 		}
 
 		if(utils.dataChannelSupport && this.config.dataChannelEnabled){
@@ -876,16 +889,19 @@ var Peer = utils.Extend(utils.Event, {
 	},
 	createOffer: function(){
 		this.createPeerConnection();
-		this.pc.createOffer(utils.bind(function(sessionDesc){
+		this.pc.createOffer().then(utils.bind(function(sessionDesc) {
+			console.log(sessionDesc.sdp);
 			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
-			this.pc.setLocalDescription(sessionDesc);
-			this.fire("sendOfferSdp", sessionDesc);
+			this.pc.setLocalDescription(sessionDesc).then(utils.bind(function () {
+				this.fire("sendOfferSdp", sessionDesc);
+			}, this));
+
 		}, this), utils.bind(function(){
 			//에러
-		}, this), this._getConstraints());
+		}, this));
 	},
 	createAnswer: function(sdp){
 		if(!this.pc){
@@ -894,33 +910,26 @@ var Peer = utils.Extend(utils.Event, {
 		var me = this,
 			pc = this.pc;
 
-		try{
-			pc.setRemoteDescription(new NativeRTCSessionDescription(sdp));
-		}
-		catch(e){
-			//에러
-			return;
-		}
+		pc.setRemoteDescription(sdp).then(utils.bind(function(){
+			pc.createAnswer().then(utils.bind(function(sessionDesc){
+				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
+				sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
+				sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
-		pc.createAnswer(utils.bind(function(sessionDesc){
-			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
-			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
-			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
+				this.pc.setLocalDescription(sessionDesc);
+				this.fire("sendAnswerSdp", sessionDesc);
+			}, this), utils.bind(function(e){
+				//에러
+			}, this));
+		}, this)).catch(utils.bind(function(e){
 
-			this.pc.setLocalDescription(sessionDesc);
-			this.fire("sendAnswerSdp", sessionDesc);
-		}, this), utils.bind(function(e){
-			//에러
-		}, this), this._getConstraints());
+		}, this));
 	},
 	receiveAnwserSdp: function(sdp){
 		var pc = this.pc;
-		try{
-			pc.setRemoteDescription(new NativeRTCSessionDescription(sdp));
-		}
-		catch(e){
-			//에러
-		}
+		pc.setRemoteDescription(sdp).catch(function(){
+
+		});
 	},
 	receiveCandidate: function(candidate){
 		if(!this.pc){
@@ -928,13 +937,9 @@ var Peer = utils.Extend(utils.Event, {
 		}
 
 		var pc = this.pc;
-		try{
-			candidate = new NativeRTCIceCandidate(candidate);
-			pc.addIceCandidate(candidate);
-		}
-		catch(e){
-			//에러
-		}
+		pc.addIceCandidate(candidate).catch(function (e) {
+			//error
+		});
 	},
 	close: function(){
 		if(this.pc){
@@ -945,9 +950,15 @@ var Peer = utils.Extend(utils.Event, {
 	getDataChannel: function(){
 		return this.data;
 	},
-	getMedia: function(){
-		if(this.media){
-			return this.media;
+	getLocalMedia: function(){
+		if(this.localMedia){
+			return this.localMedia;
+		}
+		return null;
+	},
+	getRemoteMedia: function(){
+		if(this.remoteMedia){
+			return this.remoteMedia;
 		}
 		return null;
 	},

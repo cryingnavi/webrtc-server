@@ -426,8 +426,8 @@ var Channeling = utils.Extend(utils.Event, {
 				token: this.rtc.getOfferTokenId()
 			},
 			body: {
-				roomId: roomId,
-				sdp: sdp
+				roomId: this.rtc.getRoomId(),
+				sdp: JSON.stringify(sdp)
 			}
 		});
 
@@ -440,8 +440,8 @@ var Channeling = utils.Extend(utils.Event, {
 				token: this.rtc.getAnswerTokenId()
 			},
 			body: {
-				roomId: roomId,
-				sdp: sdp
+				roomId: this.rtc.getRoomId(),
+				sdp: JSON.stringify(sdp)
 			}
 		});
 
@@ -454,8 +454,8 @@ var Channeling = utils.Extend(utils.Event, {
 				token: this.rtc.getOfferTokenId()
 			},
 			body: {
-				roomId: roomId,
-				candidate: candidate
+				roomId: this.rtc.getRoomId(),
+				candidate: JSON.stringify(candidate)
 			}
 		});
 
@@ -468,7 +468,7 @@ var Channeling = utils.Extend(utils.Event, {
 				token: this.rtc.getAnswerTokenId()
 			},
 			body: {
-				roomId: roomId,
+				roomId: this.rtc.getRoomId(),
 				candidate: candidate
 			}
 		});
@@ -553,6 +553,7 @@ var RTC = utils.Extend(utils.Event, {
 		this.offer = null;
 		this.answerToken = '';
 		this.answer = null;
+		this.roomId = '';
 
 		this.userMedia = {
 			audio: this.config.userMedia.audio,
@@ -572,6 +573,9 @@ var RTC = utils.Extend(utils.Event, {
 	},
 	getAnswerTokenId: function () {
 		return this.answerToken;
+	},
+	getRoomId: function () {
+		return this.roomId;
 	},
   createLocalMedia: function () {
     navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
@@ -598,6 +602,7 @@ var RTC = utils.Extend(utils.Event, {
 		}, this));
 	},
   call: function (roomId) {
+		this.roomId = roomId;
 		this.calling.call(roomId);
   },
 	hangUp: function () {
@@ -620,7 +625,7 @@ var RTC = utils.Extend(utils.Event, {
 			token = this.getAnswerTokenId();
 		}
 
-		var peer = new Peer(token, localStream, peerConfig);
+		var peer = new Peer(this, token, localStream, peerConfig);
 		peer.on("sendOfferSdp", this.sendOfferSdp, this);
 		peer.on("sendAnswerSdp", this.sendAnswerSdp, this);
 		peer.on("addRemoteStream", this.addRemoteStream, this);
@@ -671,7 +676,7 @@ var RTC = utils.Extend(utils.Event, {
 
 
 var Peer = utils.Extend(utils.Event, {
-	initialize: function(token, localStream, config){
+	initialize: function(obj, token, localStream, config){
 		Peer.base.initialize.call(this);
 
 		this.config = utils.apply({
@@ -688,6 +693,7 @@ var Peer = utils.Extend(utils.Event, {
 			}
 		}, config);
 
+		this.call = obj;
 		this.localStream = localStream;
 		this.media = null;
 		this.connected = false;
@@ -724,8 +730,13 @@ var Peer = utils.Extend(utils.Event, {
 				this.fire("sendCandidate", this.id, e.candidate);
 			}
 		}, this);
-
+/*
 		pc.onaddstream = utils.bind(function(e){
+			this.media = new Media(e.stream);
+			this.fire("addRemoteStream", this.id, this.uid, e.stream);
+		}, this);
+*/
+		pc.track = utils.bind(function(e){
 			this.media = new Media(e.stream);
 			this.fire("addRemoteStream", this.id, this.uid, e.stream);
 		}, this);
@@ -747,13 +758,8 @@ var Peer = utils.Extend(utils.Event, {
 		}, this);
 	},
 	createPeerConnection: function(){
-		this.pc = new PeerConnection({
+		this.pc = new RTCPeerConnection({
 			iceServers: this.config.iceServers
-		}, {
-			optional: [
-				{ DtlsSrtpKeyAgreement: true },
-				{ RtpDataChannels: false }
-			]
 		});
 
 		this.setEvent();
@@ -764,7 +770,7 @@ var Peer = utils.Extend(utils.Event, {
 		if(utils.dataChannelSupport && this.config.dataChannelEnabled){
 			this.data = new Data(this);
 			this.data.on("open", utils.bind(function(){
-				this.call.playRtc.fire("addDataStream", this.id, this.uid, this.data);
+				//this.call.playRtc.fire("addDataStream", this.id, this.uid, this.data);
 			}, this));
 		}
 		else{
@@ -850,8 +856,8 @@ var Peer = utils.Extend(utils.Event, {
 		var constraints;
 		if(utils.browser.name === "firefox"){
 			constraints = {
-				offerToReceiveAudio: this.call.playRtc.userMedia.audio,
-				offerToReceiveVideo: this.call.playRtc.userMedia.video
+				offerToReceiveAudio: this.call.userMedia.audio,
+				offerToReceiveVideo: this.call.userMedia.video
 			};
 		}
 		else{
@@ -861,8 +867,8 @@ var Peer = utils.Extend(utils.Event, {
 					{ DtlsSrtpKeyAgreement: true}
 				],
 				mandatory: {
-					OfferToReceiveAudio: this.call.playRtc.userMedia.audio,
-					OfferToReceiveVideo: this.call.playRtc.userMedia.video
+					OfferToReceiveAudio: this.call.userMedia.audio,
+					OfferToReceiveVideo: this.call.userMedia.video
 				}
 			};
 		}

@@ -420,6 +420,18 @@ var Channeling = utils.Extend(utils.Event, {
 
 		this.send(data);
 	},
+	hangUp: function(){
+		var data = this.serialize({
+			header: {
+				command: "hangup"
+			},
+			body: {
+				roomId: roomId
+			}
+		});
+
+		this.send(data);
+	},
 	sendOfferSdp: function (sdp) {
 		var data = this.serialize({
 			header: {
@@ -605,7 +617,7 @@ var RTC = utils.Extend(utils.Event, {
 		this.calling.call(roomId);
   },
 	hangUp: function () {
-
+		this.calling.hangUp(this.roomId);
 	},
 	createPeer: function (type) {
 		var localStream = this.localMedia.getStream();

@@ -26,12 +26,6 @@ function Room (roomId) {
       return true;
     });
   };
-  _.broadcast = function (message) {
-    var _self = this;
-    this.users.forEach(function (user) {
-      user.ws.send(message);
-    });
-  };
 }(Room.prototype));
 
 

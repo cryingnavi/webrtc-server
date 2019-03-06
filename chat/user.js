@@ -1,6 +1,7 @@
 function User (token, ws) {
   this.token = token;
   this.ws = ws;
+  this.roomId = '';
 }
 
 (function (_) {

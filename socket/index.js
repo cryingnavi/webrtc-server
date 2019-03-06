@@ -20,9 +20,6 @@ module.exports = {
       UserMgr.createUser(uuid, conn);
 
       conn.on('message', function(message) {
-
-        console.log(message.utf8Data);
-
         var data = JSON.parse(message.utf8Data);
         var room = RoomMgr.getRoom(data.body.roomId);
         var offer = null;
@@ -54,6 +51,11 @@ module.exports = {
               }
             });
           }
+        } else if (data.header.command === "hangup") {
+          offer = room.getOfferUser();
+          answer = room.getAnswerUser();
+
+
         } else if (data.header.command === "offer_sdp") {
           answer = room.getAnswerUser();
           answer.send({

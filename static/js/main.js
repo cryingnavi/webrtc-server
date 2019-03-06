@@ -31,6 +31,14 @@ var rtc = new RTC({
   ]
 });
 
+rtc.on("localStream", function (stream) {
+  localVideo.get(0).srcObject = stream;
+});
+
+rtc.on("remoteStream", function (stream) {
+  remoteVideo.get(0).srcObject = stream;
+});
+
 rtc.on("error", function(message){
   console.log(message);
 });

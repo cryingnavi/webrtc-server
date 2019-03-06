@@ -160,11 +160,11 @@ utils.Event = utils.Extend(BaseKlass, {
 	off: function(name, callback, context){
 		var retain, ev, listeners, names = [], i, l;
 		if (!name && !callback && !context) {
-			this.listeners = void 0;
 			return this;
 		}
 
-		if (listeners = this.listeners[name]) {
+		listeners = this.listeners[name];
+		if (listeners) {
 			this.listeners[name] = retain = [];
 			if (callback || context) {
 				for (i = 0, l = listeners.length; i < l; i++) {
@@ -204,6 +204,7 @@ utils.Event = utils.Extend(BaseKlass, {
 						}
 						return this;
 					}
+					break;
 				default:
 					if(len === 1){
 						return (ev = listeners[0]).callback.apply(ev.context, args);
@@ -296,8 +297,8 @@ function request(options){
 					res = JSON.parse(res);
 					resolve(res);
 				}
-				catch(e) {
-					reject(e);
+				catch(err) {
+					reject(err);
 				}
 			}
 			else if (xhr.readyState === 4 && xhr.status !== 200) {
@@ -516,8 +517,6 @@ var RTC = utils.Extend(utils.Event, {
 			url: '',
 			ws: '',
 			iceServers: null,
-			localMediaTarget: null,
-			remoteMediaTarget: null,
 			userMedia: {
 				audio: true,
 				video: true
@@ -529,24 +528,16 @@ var RTC = utils.Extend(utils.Event, {
 			},
 			preferCodec: {
 				audio: "opus",
-				video: "H264"
+				video: "VP9"
 			},
 			onlyTurn: false
 		};
 		utils.apply(this.config, config);
 
-		if (!this.config.localMediaTarget) {
-			alert('Error!!');
-			return;
-		}
-
     if(!this.config.userMedia.audio && !this.config.userMedia.video && !this.config.dataChannelEnabled){
 			alert('Error!!');
 			return;
 		}
-
-		this.localMediaTarget = document.getElementById(this.config.localMediaTarget);
-		this.remoteMediaTarget = document.getElementById(this.config.remoteMediaTarget);
 
 		this.url = this.config.url;
 		this.ws = this.config.ws;
@@ -589,8 +580,7 @@ var RTC = utils.Extend(utils.Event, {
   createLocalMedia: function () {
     navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
 			this.localMedia = new Media(stream);
-			this.localMediaTarget.srcObject = stream;
-      this.fire("createLocal", stream);
+      this.fire("localStream", stream);
     }, this)).catch(utils.bind(function(e){
       this.fire("createLocal", {
 				type: "createLocal",
@@ -647,7 +637,7 @@ var RTC = utils.Extend(utils.Event, {
 		return peer;
 	},
 	onConnect: function (token) {
-		this.token = token
+		this.token = token;
 	},
 	onCallOffer: function (answerToken) {
 		this.answerToken = answerToken;
@@ -685,8 +675,7 @@ var RTC = utils.Extend(utils.Event, {
 	},
 	addRemoteStream: function (stream) {
 		this.remoteMedia = new Media(stream);
-		this.remoteMediaTarget.srcObject = stream;
-		this.fire("createRemote", stream);
+		this.fire("remoteStream", stream);
 	}
 });
 
@@ -790,6 +779,7 @@ var Peer = utils.Extend(utils.Event, {
 			//에러
 		}
 	},
+	/*
 	replaceBandWidth: function(sdp){
 		if(!this.config.bandwidth){
 			return sdp;
@@ -831,6 +821,54 @@ var Peer = utils.Extend(utils.Event, {
 
 		return sdp;
 	},
+	*/
+	replaceBandWidth: function(sdp, media, bandwidth){
+		if(!this.config.bandwidth){
+			return sdp;
+		}
+
+		var modifier = 'AS';
+		if (adapter.browserDetails.browser === 'firefox') {
+	    bandwidth = (bandwidth >>> 0) * 1000;
+	    modifier = 'TIAS';
+	  }
+
+		var lines = sdp.split("\n");
+	  var line = -1;
+	  for (var i = 0; i < lines.length; i++) {
+	    if (lines[i].indexOf("m="+media) === 0) {
+	      line = i;
+	      break;
+	    }
+	  }
+	  if (line === -1) {
+	    console.debug("Could not find the m line for", media);
+	    return sdp;
+	  }
+	  console.debug("Found the m line for", media, "at line", line);
+
+	  // Pass the m line
+	  line++;
+
+	  // Skip i and c lines
+	  while(lines[line].indexOf("i=") === 0 || lines[line].indexOf("c=") === 0) {
+	    line++;
+	  }
+
+	  // If we're on a b line, replace it
+	  if (lines[line].indexOf("b") === 0) {
+	    console.debug("Replaced b line at line", line);
+			lines[line] = "b=" + modifier + ":" + bandwidth;
+	    return lines.join("\n");
+	  }
+
+	  // Add a new b line
+	  console.debug("Adding new b line before line", line);
+	  var newLines = lines.slice(0, line);
+	  newLines.push("b=" + modifier + ":" + bandwidth);
+	  newLines = newLines.concat(lines.slice(line, lines.length));
+	  return newLines.join("\n");
+	},
 	replacePreferCodec: function(sdp, mLineReg, preferCodec){
 		var mLine,
 			newMLine = [],
@@ -865,7 +903,7 @@ var Peer = utils.Extend(utils.Event, {
 
 		return sdp.replace(mLine, newMLine.join(" "));
 	},
-	_getConstraints: function(){
+	_getSdpOptions: function(){
 		var constraints;
 		if(utils.browser.name === "firefox"){
 			constraints = {
@@ -875,23 +913,18 @@ var Peer = utils.Extend(utils.Event, {
 		}
 		else{
 			constraints = {
-				optional: [
-					{ VoiceActivityDetection: false	},
-					{ DtlsSrtpKeyAgreement: true}
-				],
-				mandatory: {
-					OfferToReceiveAudio: this.call.userMedia.audio,
-					OfferToReceiveVideo: this.call.userMedia.video
-				}
+				offerToReceiveAudio: this.call.userMedia.audio,
+				offerToReceiveVideo: this.call.userMedia.video
 			};
 		}
 		return constraints;
 	},
 	createOffer: function(){
 		this.createPeerConnection();
-		this.pc.createOffer().then(utils.bind(function(sessionDesc) {
-			console.log(sessionDesc.sdp);
-			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
+		this.pc.createOffer(this._getSdpOptions()).then(utils.bind(function(sessionDesc) {
+			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
+			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
+			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
 			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
@@ -911,8 +944,10 @@ var Peer = utils.Extend(utils.Event, {
 			pc = this.pc;
 
 		pc.setRemoteDescription(sdp).then(utils.bind(function(){
-			pc.createAnswer().then(utils.bind(function(sessionDesc){
-				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp);
+			pc.createAnswer(this._getSdpOptions()).then(utils.bind(function(sessionDesc){
+				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
+				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
+				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);
 				sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
 				sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 

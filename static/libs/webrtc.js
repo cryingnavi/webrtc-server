@@ -285,6 +285,13 @@ utils.mediaRecorderSupport = function(stream){
 	}
 };
 
+
+utils.ERROR = {
+	"P1001": "Failed create offer sdp",
+	"P1002": "Failed create answer sdp",
+	"P1003": "Failed create offer sdp"
+};
+
 function request(options){
 	var promise = new Promise(function (resolve, reject) {
 		var req = new XMLHttpRequest();
@@ -636,6 +643,8 @@ var RTC = utils.Extend(utils.Event, {
 		//peer.on("signalEnd", this.signalEnd, this);
 		peer.on("error", function(code, desc, data){
 			//this.fire("error", code, desc, data);
+
+
 		}, this);
 		peer.on("stateChange", this._stateChange, this);
 
@@ -798,34 +807,26 @@ var Peer = utils.Extend(utils.Event, {
 		var lines = sdp.split("\n");
 	  var line = -1;
 	  for (var i = 0; i < lines.length; i++) {
-	    if (lines[i].indexOf("m="+media) === 0) {
+	    if (lines[i].indexOf("m=" + media) === 0) {
 	      line = i;
 	      break;
 	    }
 	  }
 	  if (line === -1) {
-	    console.debug("Could not find the m line for", media);
 	    return sdp;
 	  }
-	  console.debug("Found the m line for", media, "at line", line);
 
-	  // Pass the m line
 	  line++;
 
-	  // Skip i and c lines
 	  while(lines[line].indexOf("i=") === 0 || lines[line].indexOf("c=") === 0) {
 	    line++;
 	  }
 
-	  // If we're on a b line, replace it
 	  if (lines[line].indexOf("b") === 0) {
-	    console.debug("Replaced b line at line", line);
 			lines[line] = "b=" + modifier + ":" + bandwidth;
 	    return lines.join("\n");
 	  }
 
-	  // Add a new b line
-	  console.debug("Adding new b line before line", line);
 	  var newLines = lines.slice(0, line);
 	  newLines.push("b=" + modifier + ":" + bandwidth);
 	  newLines = newLines.concat(lines.slice(line, lines.length));
@@ -896,6 +897,8 @@ var Peer = utils.Extend(utils.Event, {
 
 		}, this), utils.bind(function(){
 			//에러
+
+			this.fire("");
 		}, this));
 	},
 	createAnswer: function(sdp){

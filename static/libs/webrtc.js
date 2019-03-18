@@ -720,14 +720,6 @@ var Peer = utils.Extend(utils.Event, {
 		var pc = this.pc;
 		pc.onicecandidate = utils.bind(function(e){
 			if(e.candidate){
-				/*
-				if(this.config.onlyTurn){
-					if(e.candidate.candidate.indexOf("relay") < 0){
-						return;
-					}
-				}
-				*/
-
 				this.fire("sendCandidate", e.candidate);
 			}
 		}, this);
@@ -738,8 +730,6 @@ var Peer = utils.Extend(utils.Event, {
 		}, this);
 */
 		pc.ontrack = utils.bind(function(e){
-			console.log(e.streams);
-			//this.media = new Media(e.stream);
 			this.fire("addRemoteStream", e.streams[0]);
 		}, this);
 
@@ -773,10 +763,7 @@ var Peer = utils.Extend(utils.Event, {
 		this.setEvent();
 		if(this.localStream){
 			var me = this;
-			//this.pc.addTrack(this.localStream);
-			//this.localStream.getTracks().forEach(track => this.pc.addTrack(track, this.localStream));
 			this.localStream.getTracks().forEach(function (track) {
-				console.log(track);
 				me.pc.addTrack(track, me.localStream);
 			});
 		}
@@ -786,54 +773,17 @@ var Peer = utils.Extend(utils.Event, {
 			this.data.on("open", utils.bind(function(){
 				//this.call.playRtc.fire("addDataStream", this.id, this.uid, this.data);
 			}, this));
+			this.data.on("close", utils.bind(function(){
+
+			}, this));
+			this.data.on("error", utils.bind(function(){
+
+			}, this));
 		}
 		else{
 			//에러
 		}
 	},
-	/*
-	replaceBandWidth: function(sdp){
-		if(!this.config.bandwidth){
-			return sdp;
-		}
-
-		var bundles = sdp.match(/a=group:BUNDLE (.*)?\r\n/);
-		if(bundles){
-			if(bundles[1]){
-				bundles = bundles[1].split(" ");
-			}
-			else{
-				return sdp;
-			}
-		}
-		else{
-			return sdp;
-		}
-
-		var ab = this.config.bandwidth.audio,
-			vb = this.config.bandwidth.video,
-			db = this.config.bandwidth.data,
-			vReg = new RegExp("a=rtpmap:(\\d+) " + this.config.preferCodec.video + "/(\\d+)");
-		sdp = sdp.replace(/b=AS([^\r\n]+\r\n)/g, "");
-
-		for(var i=0; i<bundles.length; i++){
-			if(bundles[i] === "audio" || bundles[i] === "sdparta_0"){
-				if(this.config.preferCodec.audio === "opus"){
-					sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (ab > 0 ? ab : 32) + "\r\n");
-				}
-			}else if(bundles[i] === "video" || bundles[i] === "sdparta_1"){
-				sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (vb > 0 ? vb : 1500) + "\r\n");
-				if (utils.browser.name === "chrome"){
-					sdp = sdp.replace(vReg, "a=rtpmap:$1 " + this.config.preferCodec.video + "/$2\r\na=fmtp:$1 x-google-start-bitrate=600; x-google-min-bitrate=600; x-google-max-bitrate=" + (vb > 0 ? vb : 1500) + "; x-google-max-quantization=56");
-				}
-			}else if(bundles[i] === "data" || bundles[i] === "sdparta_2"){
-				sdp = sdp.replace("a=mid:"+bundles[i]+"\r\n", "a=mid:"+bundles[i]+"\r\nb=AS:" + (db > 0 ? db : 1638400) + "\r\n");
-			}
-		}
-
-		return sdp;
-	},
-	*/
 	replaceBandWidth: function(sdp, media, bandwidth){
 		if(!this.config.bandwidth){
 			return sdp;
@@ -1083,11 +1033,7 @@ var Media = (function(){
 		},
 		createRecorder: function(){
 			if(!utils.mediaRecorderSupport){
-				Logger.warn("cdm", {
-					klass: "Media",
-					method: "createRecorder",
-					message: "Media Recorder is not suporrted"
-				});
+				//
 			}
 
 			var recorder = null,
@@ -1174,6 +1120,736 @@ var Media = (function(){
 			}
 		}
 	});
+})();
+
+
+var Data = (function(){
+	if(!utils.blobWorkerSupport){
+		return false;
+	}
+
+	var TYPE = {
+		0: "text",
+		1: "binary"
+	};
+
+	var HEADERTYPE = {
+		0: "master",
+		1: "frag"
+	};
+
+	function getUniqId(){
+		return new Date().getTime();
+	}
+
+	function concatBuffer(buf1, buf2){
+		var tmp = new Uint8Array(buf1.byteLength + buf2.byteLength);
+		tmp.set(new Uint8Array(buf1), 0);
+		tmp.set(new Uint8Array(buf2), buf1.byteLength);
+		return tmp.buffer;
+	}
+
+	var TextReceiveDatas = { };
+	var FileReceiveDatas = { };
+
+	return utils.Extend(utils.Event, {
+		initialize: function(peer){
+			Data.base.initialize.call(this);
+
+			this.peer = peer;
+			this.sending = false;
+			this.queue = [];
+			this.dataChannel = this.peer.getPeerConnection().createDataChannel("channel", {
+				id: 1
+			});
+			this.fileReceiveStartTime = 0;
+
+			this.dataChannel.binaryType = "arraybuffer";
+
+			this.setEvent();
+		},
+		setEvent: function(){
+			var dc = this.dataChannel;
+			dc.onopen = utils.bind(function(e){
+				this.fire("open", e);
+			}, this);
+
+			dc.onclose = utils.bind(function(e){
+				this.fire("close", e);
+			}, this);
+
+			dc.onerror = utils.bind(function(e){
+
+
+				/**
+				 * �곗씠�곕� 二쇨퀬 諛쏆쓣 �� �먮윭媛� 諛쒖깮�섎㈃ �대깽�멸� �몄텧�쒕떎.
+				 * @event error
+				 * @memberof Data.prototype
+				 * @param {Object} err �먮윭 媛앹껜 �먮뒗 臾몄옄�댁쓣 �꾨떖 諛쏅뒗��. DataChannel �� �먮윭 �대깽�멸� �몄텧�섎㈃ �먮윭 媛앹껜媛� �꾨떖�섍퀬 �꾩넚 �먮뒗 �곗씠�곕� 諛쏆븯�� �� �뚯떛怨쇱젙�먯꽌 �먮윭媛� �섎㈃ SEND_ERROR, RECEIVE_ERROR 臾몄옄�댁쓣 �꾨떖 諛쏅뒗��.
+				 * @example
+				 	dc.on("error", function(err){
+
+				 	});
+				 */
+				this.fire("error", e);
+			}, this);
+
+			function onmessage(data){
+				var dv = new DataView(data),
+					id = dv.getFloat64(0),
+					type = null;
+
+				/* MCU DataChannel ���� Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+				* sender platform(this.peer.peers.platformtype) : windows / mac / linux / ios / android
+				* sender current version(this.peer.peers.sdkversion) : PLATFORM_VERSION[platform]
+				* versionCheck : utils.versionCompare(sender version, PLATFORM_VERSION[sender platform]) - lower version : -1, exact version : 0, higher version : 1
+				* �곸슜 SDK web(windows, mac, linux) : 2.2.17 �댁긽, ios : 2.2.8 �댁긽, android : 2.2.9 �댁긽*/
+				var versionCheck = utils.versionCompare(this.peer.peers.sdkversion, PLATFORM_VERSION[this.peer.peers.platformtype], this.peer.call.playRtc.channelType);	//lower version : -1, exact version : 0, higher version : 1
+
+				if(versionCheck === -1) {
+					type = dv.getInt32(20);
+				} else {
+					type = dv.getInt32(54);
+				}
+
+				try{
+					if(TextReceiveDatas[id]){
+						this.textReceive(id, dv, data);
+					}
+					else if(FileReceiveDatas[id]){
+						this.fileReceive(id, dv, data);
+					}
+					else{
+						if(TYPE[type] === "text"){
+							this.textReceive(id, dv, data);
+						}
+						else{
+							this.fileReceive(id, dv, data);
+						}
+					}
+				}
+				catch(e){
+					this.fire("error", e);
+				}
+			};
+
+			dc.onmessage = utils.bind(function(e){
+				onmessage.call(this, e.data);
+			}, this);
+		},
+		send: function(message, success, error){
+			if(message.size && message.name){
+				if(!this.sending){
+					this.sendFile(message, success, error);
+				}
+				else{
+					this.queue.push({
+						message: message,
+						success: success,
+						error: error
+					});
+				}
+
+				this.sending = true;
+			}
+			else{
+				message = message.toString();
+				this.sendText(message, success, error);
+			}
+		},
+		bufferedSend: function(message){
+			var dc = this.dataChannel;
+			try{
+				dc.send(message);
+			}
+			catch(e){
+				return false;
+			}
+
+			return true;
+		},
+		sendText: function(text, success, error){
+			var dc = this.dataChannel,
+				id = getUniqId(),
+				tokenId = this.peer.call.getToken(),		// Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+				fragHbuf = new ArrayBuffer(20),
+				fragDv = new DataView(fragHbuf),
+				buf = new ArrayBuffer(text.length * 2),
+				view = new Uint8Array(buf),
+				i = 0,
+				char = null,
+				len = text.length,
+				j = 0,
+				totalSize = buf.byteLength,
+				arr, hbuf, dv, fragCount;
+
+				fragDv.setFloat64(0, id);
+				fragDv.setInt32(8, 1);
+
+			var send = utils.bind(function(hbuf, arr, index){
+				var bbuf = arr[index];
+
+				this.fire("sending", {
+					id: id,
+					type: "text",
+					totalSize: totalSize,
+					fragSize: arr[index].byteLength,
+					fragCount: fragCount,
+					fragIndex: index
+				});
+
+				if(!this.bufferedSend(concatBuffer(hbuf, bbuf))){
+					//error
+					if(error){
+						error(text);
+					}
+					return;
+				}
+
+				if((index + 1) < arr.length){
+					window.setTimeout(function(){
+						var i = index + 1;
+						fragDv.setInt32(12, i);
+						fragDv.setInt32(16, arr[i].byteLength);
+
+						send(fragDv.buffer, arr, i);
+					}, 100);
+				}
+				else{
+					//success
+					if(success){
+						success(text);
+					}
+				}
+			}, this);
+
+			for(;i < len; i++) {
+				char = text.charCodeAt(i);
+				view[j] = char >>> 8;
+				view[j + 1] = char & 0xFF;
+				j = j + 2;
+			}
+
+			/* MCU DataChannel ���� Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+			* sender platform(this.peer.peers.platformtype) : windows / mac / linux / ios / android
+			* sender current version(this.peer.peers.sdkversion) : PLATFORM_VERSION[platform]
+			* versionCheck : utils.versionCompare(sender version, PLATFORM_VERSION[sender platform]) - lower version : -1, exact version : 0, higher version : 1
+			* �곸슜 SDK web(windows, mac, linux) : 2.2.17 �댁긽, ios : 2.2.8 �댁긽, android : 2.2.9 �댁긽*/
+			var versionCheck = utils.versionCompare(this.peer.peers.sdkversion, PLATFORM_VERSION[this.peer.peers.platformtype], this.peer.call.playRtc.channelType);	//lower version : -1, exact version : 0, higher version : 1
+
+			var arr = this.packetSplit(buf, 8192);
+			if(versionCheck === -1) {
+				hbuf = new ArrayBuffer(36);
+			} else {
+				hbuf = new ArrayBuffer(70);
+			}
+			dv = new DataView(hbuf);
+
+			fragCount = arr.length;
+
+			var pos = 0;
+
+			dv.setFloat64(pos, id);				// �곗씠�� �꾩씠��( 8 byte) : long �꾩넚 �곗씠�� �ㅽ듃由쇱쓽 怨좎쑀 �꾩씠��
+			pos += 8;
+			dv.setInt32(pos, 0);					// �ㅻ뜑 ����(4 byte) : int, Master/Frag Block Header Type, 0: Master
+			pos += 4;
+			if(versionCheck !== -1) {
+				// Sender �꾩씠��(34 byte) : �곗씠�� �꾩넚 �ъ슜�� �꾩씠�� 17��(Token ID)
+				var i = pos, j = 0;
+				pos += 34;
+				for (; i<pos; i=i+2) {
+					tmp = tokenId.charCodeAt(j);
+					if(tmp){
+						dv.setUint8(i, tmp >>> 8);
+						dv.setUint8(i+1, tmp & 0xFF);
+					}
+					j++;
+				}
+			}
+			dv.setFloat64(pos, totalSize);		// �곗씠�� �ш린( 8 byte) : long, Application �곗씠�� �꾩껜 �ш린
+			pos += 8;
+			dv.setInt32(pos, 0);					// �곗씠�� �좏삎(4 byte) : int, 0 : �띿뒪��, 1 : �뚯씪
+			pos += 4;
+			dv.setInt32(pos, fragCount);		// Block Count(4 byte) : int, �꾩껜 �곗씠�� Block ��
+			pos += 4;
+			dv.setInt32(pos, 0);					// Block Index(4 byte) : �꾩넚�섎뒗 Block�� index
+			pos += 4;
+			dv.setInt32(pos, arr[0].byteLength);	// Block �곗씠�� �ш린(4 byte) : int, �꾩넚�섎뒗 Application Data�� �ш린
+
+			send(dv.buffer, arr, 0);
+		},
+		sendFile: function(file, success, error){
+			var dc = this.dataChannel,
+				id = getUniqId(),
+				tokenId = this.peer.call.getToken(),		// Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+				fileName = file.name,
+				mimeType = file.type,
+				chunkSize = 8192,
+				me = this,
+				index = 0,
+				totalSize = file.size,
+				fragCount = Math.ceil(totalSize / chunkSize);
+
+			/* MCU DataChannel ���� Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+			* sender platform(this.peer.peers.platformtype) : windows / mac / linux / ios / android
+			* sender current version(this.peer.peers.sdkversion) : PLATFORM_VERSION[platform]
+			* versionCheck : utils.versionCompare(sender version, PLATFORM_VERSION[sender platform]) - lower version : -1, exact version : 0, higher version : 1
+			* �곸슜 SDK web(windows, mac, linux) : 2.2.17 �댁긽, ios : 2.2.8 �댁긽, android : 2.2.9 �댁긽*/
+			var versionCheck = utils.versionCompare(this.peer.peers.sdkversion, PLATFORM_VERSION[this.peer.peers.platformtype], this.peer.call.playRtc.channelType);	//lower version : -1, exact version : 0, higher version : 1
+
+			if(versionCheck === -1) {
+				var mbuf = new ArrayBuffer(548);
+			} else {
+				var mbuf = new ArrayBuffer(582);
+			}
+
+			var mdv = new DataView(mbuf),
+				tmp = null;
+
+			var pos = 0;
+
+			mdv.setFloat64(pos, id);				// �곗씠�� �꾩씠��( 8 byte) : long �꾩넚 �곗씠�� �ㅽ듃由쇱쓽 怨좎쑀 �꾩씠��
+			pos += 8;
+			mdv.setInt32(pos, 0);					// �ㅻ뜑 ����(4 byte) : int, Master/Frag Block Header Type, 0: Master
+			pos += 4;
+			if(versionCheck !== -1) {
+				// Sender �꾩씠��(34 byte) : �곗씠�� �꾩넚 �ъ슜�� �꾩씠�� 17��(Token ID)
+				var i = pos, j = 0;
+				pos += 34;
+				for (; i<pos; i=i+2) {
+					tmp = tokenId.charCodeAt(j);
+					if(tmp){
+						mdv.setUint8(i, tmp >>> 8);
+						mdv.setUint8(i+1, tmp & 0xFF);
+					}
+					j++;
+				}
+			}
+
+			mdv.setFloat64(pos, totalSize);		// �곗씠�� �ш린( 8 byte) : long, Application �곗씠�� �꾩껜 �ш린
+			pos += 8;
+			mdv.setInt32(pos, 1);					// �곗씠�� �좏삎(4 byte) : int, 0 : �띿뒪��, 1 : �뚯씪
+			pos += 4;
+
+			var i = pos, j = 0;
+			pos += 256;
+			for (; i<pos; i=i+2) {
+				tmp = fileName.charCodeAt(j);
+				if(tmp){
+					mdv.setUint8(i, tmp >>> 8);
+					mdv.setUint8(i+1, tmp & 0xFF);
+				}
+				j++;
+			}
+
+			var i = pos, j = 0;
+			pos += 256;
+			for (; i<pos; i=i+2) {
+				tmp = mimeType.charCodeAt(j);
+				if(tmp){
+					mdv.setUint8(i, tmp >>> 8);
+					mdv.setUint8(i+1, tmp & 0xFF);
+				}
+				j++;
+			}
+
+			mdv.setInt32(pos, fragCount);		// Block Count(4 byte) : int, �꾩껜 �곗씠�� Block ��
+			pos += 4;
+			mdv.setInt32(pos, index);				// Block Index(4 byte) : �꾩넚�섎뒗 Block�� index
+			pos += 4;
+			// Block �곗씠�� �ш린(4 byte) : int, �꾩넚�섎뒗 Application Data�� �ш린
+			if(totalSize < chunkSize){
+				mdv.setInt32(pos, totalSize);
+			}
+			else{
+				mdv.setInt32(pos, chunkSize);
+			}
+
+			var fbuf = new ArrayBuffer(20),
+				fdv = new DataView(fbuf);
+
+			fdv.setFloat64(0, id);
+			fdv.setInt32(8, 1);
+
+			function send(offset){
+				var reader = new FileReader(),
+					size = 0,
+					hbuf = null;
+
+				size = offset + chunkSize;
+				reader.onload = utils.bind(function(e){
+					if(offset === 0){
+						hbuf = mdv.buffer;
+					}
+					else{
+						index++;
+						fdv.setInt32(12, index);
+						fdv.setInt32(16, e.target.result.byteLength);
+						hbuf = fdv.buffer;
+					}
+
+					me.fire("sending", {
+						id: id,
+						type: "binary",
+						fileName: fileName,
+						mimeType: mimeType,
+						totalSize: totalSize,
+						fragSize: e.target.result.byteLength,
+						fragCount: fragCount,
+						fragIndex: index
+					});
+
+					me.bufferedSend(concatBuffer(hbuf, e.target.result));
+					if (totalSize > offset + e.target.result.byteLength) {
+						if(dc.bufferedAmount !== 0){
+							var interval = window.setInterval(function(){
+								if(dc.bufferedAmount === 0){
+									window.clearInterval(interval);
+									interval = null;
+
+									send(size);
+								}
+							}, 0);
+						}
+						else{
+							send(size);
+						}
+					}
+					else{
+						me.sending = false;
+						//success
+						if(success){
+							success(file);
+						}
+
+						nextData = me.queue.pop();
+						if(nextData){
+							me.send(nextData.message, nextData.success, nextData.error);
+						}
+					}
+				}, this);
+
+				var slice = file.slice(offset, size);
+				reader.readAsArrayBuffer(slice);
+			};
+
+			send(0);
+		},
+		textReceive: function(id, dv, data){
+			var progress = { },
+				body = null,
+				headerType = dv.getInt32(8);
+
+			progress.peerId = this.peer.id;
+			if(HEADERTYPE[headerType] === "master"){
+				/* MCU DataChannel ���� Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+				* sender platform(this.peer.peers.platformtype) : windows / mac / linux / ios / android
+				* sender current version(this.peer.peers.sdkversion) : PLATFORM_VERSION[platform]
+				* versionCheck : utils.versionCompare(sender version, PLATFORM_VERSION[sender platform]) - lower version : -1, exact version : 0, higher version : 1
+				* �곸슜 SDK web(windows, mac, linux) : 2.2.17 �댁긽, ios : 2.2.8 �댁긽, android : 2.2.9 �댁긽*/
+				var versionCheck = utils.versionCompare(this.peer.peers.sdkversion, PLATFORM_VERSION[this.peer.peers.platformtype], this.peer.call.playRtc.channelType);	//lower version : -1, exact version : 0, higher version : 1
+				progress.id = id;
+
+				if(versionCheck ===-1) {
+					progress.totalSize = dv.getFloat64(12);
+					progress.fragCount = dv.getInt32(24);
+					progress.fragIndex = dv.getInt32(28);
+					progress.fragSize = dv.getInt32(32);
+
+					body = data.slice(36);
+				} else {
+					var tempSenderId = "";
+
+					var tmp = null;
+					var i = 12;
+					for(; i<46; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							tempSenderId = tempSenderId + tmp;
+						}
+					}
+					this.senderId = tempSenderId;
+
+					progress.totalSize = dv.getFloat64(46);
+					progress.fragCount = dv.getInt32(58);
+					progress.fragIndex = dv.getInt32(62);
+					progress.fragSize = dv.getInt32(66);
+
+					body = data.slice(70);
+				}
+
+				TextReceiveDatas[id] = [];
+				TextReceiveDatas[id].totalSize = progress.totalSize;
+				TextReceiveDatas[id].fragCount = progress.fragCount;
+				TextReceiveDatas[id].push(body);
+			}
+			else{
+				progress.id = id;
+				progress.type = "text";
+				progress.totalSize = TextReceiveDatas[id].totalSize;
+				progress.fragCount = TextReceiveDatas[id].fragCount;
+				progress.fragIndex = dv.getInt32(12);
+				progress.fragSize = dv.getInt32(16);
+
+				body = data.slice(20);
+				TextReceiveDatas[id].push(body);
+			}
+
+			/**
+			 * DataChannel �� �듯빐 �쒕줈 �곗씠�곕� 二쇨퀬 諛쏆쓣 ��, �곷�諛⑹씠 蹂대궦 �곗씠�곗쓽 �묒씠 �� 寃쎌슦 �대� 遺꾪븷�섏뿬 �꾩넚 諛쏅뒗��. �� 寃쎌슦 �꾩껜 硫붿떆吏��� �ш린�� �꾩옱 諛쏆� �ш린瑜� �ㅻ뜑 �뺣낫�� �ы븿�섍쾶 �쒕떎. Progress �대깽�몃뒗 �� �ㅻ뜑 �뺣낫瑜� 諛뷀깢�쇰줈 �ъ슜�먯뿉寃� progress �� �� �덇쾶 �댁���.
+			 * @event progress
+			 * @memberof Data.prototype
+			 * @param {Object} data
+			 * @example
+			 	dc.on("progress", function(data){
+
+			 	});
+			 */
+
+			if(versionCheck !==-1) {
+				if(this.senderId !== null){
+					progress.peerId = this.senderId;
+				}
+			}
+
+			this.fire("progress", progress);
+
+			if((progress.fragCount - 1) === progress.fragIndex){
+				try{
+					var totLength = TextReceiveDatas[id].length,
+						textData = TextReceiveDatas[id],
+						buf = new ArrayBuffer(0),
+						view = null,
+						chars = [],
+						i = 0,
+						len = 0;
+
+					for(; i<totLength; i++) {
+						buf = concatBuffer(buf, textData[i]);
+					}
+
+					i = 0;
+					view = new Uint8Array(buf);
+					len = buf.byteLength;
+					for(; i < len;) {
+						chars.push(((view[i++] & 0xff) << 8) | (view[i++] & 0xff));
+					}
+
+					if(!this.hasEvent("message")){
+						//
+					}
+
+					/**
+					 * DataChannel �� �듯빐 �쒕줈 �곗씠�곕� 二쇨퀬 諛쏆쓣 ��, �곷�諛⑹씠 蹂대궦 �곗씠�곕� �섏떊�섎뒗 �대깽�몄씠��.
+					 * @event message
+					 * @memberof Data.prototype
+					 * @param {Object} data
+					 * @example
+					 	dc.on("message", function(data){
+
+					 	});
+					 */
+					var PeerID = '';
+					if(versionCheck ===-1) {
+						PeerID = this.peer.id;
+					} else {
+						PeerID = this.senderId;
+					}
+
+					this.fire("message", {
+						type: "text",
+						id: id,
+						peerId: PeerID,
+						totalSize: textData.totalSize,
+						data: String.fromCharCode.apply(null, chars)
+					});
+				}
+				catch(e){
+					this.fire("error", e);
+				}
+			}
+		},
+		fileReceive: function(id, dv, data){
+			var progress = { },
+				body = null,
+				headerType = dv.getInt32(8),
+				blob = null,
+				tmp = null,
+				totLength = null,
+				buffer = null,
+				blob = null;
+
+			progress.peerId = this.peer.id;
+			if(HEADERTYPE[headerType] === "master"){
+				/* MCU DataChannel ���� Header(Master Block) �뺣낫 �섏젙 (jun, 2016.11.17)
+				* sender platform(this.peer.peers.platformtype) : windows / mac / linux / ios / android
+				* sender current version(this.peer.peers.sdkversion) : PLATFORM_VERSION[platform]
+				* versionCheck : utils.versionCompare(sender version, PLATFORM_VERSION[sender platform]) - lower version : -1, exact version : 0, higher version : 1
+				* �곸슜 SDK web(windows, mac, linux) : 2.2.17 �댁긽, ios : 2.2.8 �댁긽, android : 2.2.9 �댁긽*/
+				var versionCheck = utils.versionCompare(this.peer.peers.sdkversion, PLATFORM_VERSION[this.peer.peers.platformtype], this.peer.call.playRtc.channelType);	//lower version : -1, exact version : 0, higher version : 1
+
+				if(versionCheck ===-1) {
+					progress.totalSize = dv.getFloat64(12);
+
+					progress.fileName = "";
+					i = 24;
+					for(; i<280; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							progress.fileName = progress.fileName + tmp;
+						}
+					}
+
+					progress.mimeType = "";
+					i = 280;
+					for(; i<536; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							progress.mimeType = progress.mimeType + tmp;
+						}
+					}
+
+					progress.id = id;
+					progress.fragCount = dv.getInt32(536);
+					progress.fragIndex = dv.getInt32(540);
+					progress.fragSize = dv.getInt32(544);
+
+					body = data.slice(548);
+				} else {
+					var tempSenderId = "";
+
+					i = 12;
+					for(; i<46; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							tempSenderId = tempSenderId + tmp;
+						}
+					}
+
+					this.senderId = tempSenderId;
+
+					// +34
+					progress.totalSize = dv.getFloat64(46);
+
+					progress.fileName = "";
+					i = 58;
+					for(; i<314; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							progress.fileName = progress.fileName + tmp;
+						}
+					}
+
+					progress.mimeType = "";
+					i = 314;
+					for(; i<570; i = i+2){
+						tmp = String.fromCharCode(dv.getInt16(i));
+						if(tmp.charCodeAt(0) !== 0){
+							progress.mimeType = progress.mimeType + tmp;
+						}
+					}
+
+					progress.id = id;
+					progress.fragCount = dv.getInt32(570);
+					progress.fragIndex = dv.getInt32(574);
+					progress.fragSize = dv.getInt32(578);
+
+					body = data.slice(582);
+				}
+
+				FileReceiveDatas[id] = [];
+				FileReceiveDatas[id].totalSize = progress.totalSize;
+				FileReceiveDatas[id].fileName = progress.fileName;
+				FileReceiveDatas[id].mimeType = progress.mimeType;
+				FileReceiveDatas[id].fragCount = progress.fragCount;
+				FileReceiveDatas[id].push(body);
+
+				this.fileReceiveStartTime = new Date().getTime();
+			}
+			else{
+				progress.id = id;
+				progress.type = "binary";
+				progress.fileName = FileReceiveDatas[id].fileName;
+				progress.mimeType = FileReceiveDatas[id].mimeType;
+				progress.totalSize = FileReceiveDatas[id].totalSize;
+				progress.fragCount = FileReceiveDatas[id].fragCount;
+				progress.fragIndex = dv.getInt32(12);
+				progress.fragSize = dv.getInt32(16);
+
+				body = data.slice(20);
+				FileReceiveDatas[id].push(body);
+			}
+
+			if(versionCheck !==-1) {
+				if(this.senderId !== null){
+					progress.peerId = this.senderId;
+				}
+			}
+
+			this.fire("progress", progress);
+
+			if((progress.fragCount - 1) === progress.fragIndex){
+				try{
+					var blob = new Blob(FileReceiveDatas[id], {
+						type: FileReceiveDatas[id].mimeType
+					});
+
+					if(!this.hasEvent("message")){
+						//
+					}
+
+					var PeerID = '';
+					if(versionCheck ===-1) {
+						PeerID = this.peer.id;
+					} else {
+						PeerID = this.senderId;
+					}
+
+					this.fire("message", {
+						type: "binary",
+						id: id,
+						peerId: PeerID,
+						fileName: FileReceiveDatas[id].fileName,
+						mimeType: FileReceiveDatas[id].mimeType,
+						totalSize: FileReceiveDatas[id].totalSize,
+						blob: blob
+					});
+
+					this.fileReceiveStartTime = 0;
+				}
+				catch(e){
+					this.fire("error", {
+						type: "binary",
+						id: id,
+						peerId: this.peer.id,
+						fileName: FileReceiveDatas[id].fileName,
+						mimeType: FileReceiveDatas[id].mimeType,
+						totalSize: FileReceiveDatas[id].totalSize
+					});
+				}
+
+				FileReceiveDatas[id] = null;
+			}
+		},
+		packetSplit: function(buf, size){
+			var arr = [],
+				packetSize = size,
+				totalSize = buf.byteLength,
+				max = Math.ceil(totalSize / packetSize),
+				i = 0;
+
+			for (; i <max; i++) {
+				arr.push(buf.slice(i * packetSize, (i + 1) * packetSize));
+			};
+
+			return arr;
+		},
+		close: function(){
+			this.dataChannel.close();
+			this.peer.data = null;
+		}
+	});
+
 })();
 
 window.RTC = RTC;

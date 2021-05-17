@@ -14,7 +14,7 @@
     "hogan.js": "^3.0.2",
     "morgan": "^1.7.0",
     "node-uuid": "^1.4.7",
-    "socket.io": "^2.2.0",
+    "socket.io": "^2.4.0",
     "uuid": "^3.3.2",
     "websocket": "^1.0.28"
   }

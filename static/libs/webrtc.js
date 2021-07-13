@@ -427,7 +427,7 @@ var Channeling = utils.Extend(utils.Event, {
 
 		this.send(data);
 	},
-	hangUp: function(){
+	hangUp: function(roomId){
 		var data = this.serialize({
 			header: {
 				command: "hangup"
@@ -505,7 +505,6 @@ var Channeling = utils.Extend(utils.Event, {
 			case "CONNECT":
 				this.fire("onConnect", body.token);
 				break;
-
 			case "ON_CALL_OFFER":
 				this.fire("onCallOffer", body.answer);
 				break;
@@ -523,6 +522,9 @@ var Channeling = utils.Extend(utils.Event, {
 				break;
 			case "ON_ANSWER_CANDIDATE":
 				this.fire("onAnswerCandidate", JSON.parse(body.candidate));
+				break;
+			case "ON_HANGUP":
+				this.fire("onHangUp");
 				break;
 		}
 	}
@@ -562,7 +564,7 @@ var RTC = utils.Extend(utils.Event, {
 		this.ws = this.config.ws;
 		this.localMedia = null;
 		this.remoteMedia = null;
-    this.calling = null;
+    	this.calling = null;
 		this.token = '';
 		this.offerToken = '';
 		this.offer = null;
@@ -583,6 +585,7 @@ var RTC = utils.Extend(utils.Event, {
 		this.calling.on("onAnswerSdp", this.onAnswerSdp, this);
 		this.calling.on("onOfferCandidate", this.onOfferCandidate, this);
 		this.calling.on("onAnswerCandidate", this.onAnswerCandidate, this);
+		this.calling.on("onHangUp", this.onHangUp, this);
 	},
 	getTokenId: function () {
 		return this.token;
@@ -596,19 +599,19 @@ var RTC = utils.Extend(utils.Event, {
 	getRoomId: function () {
 		return this.roomId;
 	},
-  createLocalMedia: function () {
-    navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
+  	createLocalMedia: function () {
+    	navigator.mediaDevices.getUserMedia(this.userMedia).then(utils.bind(function(stream){
 			this.localMedia = new Media(stream);
-      this.fire("localStream", stream);
-    }, this)).catch(utils.bind(function(e){
-      this.fire("createLocal", {
+			this.fire("localStream", stream);
+		}, this)).catch(utils.bind(function(e){
+			this.fire("createLocal", {
 				type: "createLocal",
 				data: e
 			});
-    }, this));
-  },
+		}, this));
+	},
 	ready: function () {
-		var xhr = request({
+		request({
 			url: this.url + '/roomReady',
 			method: 'get'
 		}).then(utils.bind(function(res){
@@ -619,10 +622,10 @@ var RTC = utils.Extend(utils.Event, {
 			});
 		}, this));
 	},
-  call: function (roomId) {
+	call: function (roomId) {
 		this.roomId = roomId;
 		this.calling.call(roomId);
-  },
+	},
 	hangUp: function () {
 		this.calling.hangUp(this.roomId);
 	},
@@ -697,6 +700,9 @@ var RTC = utils.Extend(utils.Event, {
 	addRemoteStream: function (stream) {
 		this.remoteMedia = new Media(stream);
 		this.fire("remoteStream", stream);
+	},
+	onHangUp: function () {
+		this.fire("hangup");
 	}
 });
 

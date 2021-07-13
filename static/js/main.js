@@ -48,6 +48,11 @@ rtc.on("ready", function(roomId) {
   rtc.call(roomId);
 });
 
+rtc.on("hangup", function(roomId) {
+  localVideo.get(0).srcObject = null;
+  remoteVideo.get(0).srcObject = null;
+});
+
 startButton1.click(function () {
   rtc.createLocalMedia();
 });
@@ -66,4 +71,8 @@ startButton2.click(function () {
 
 callButton2.click(function () {
   rtc.call($("#roomId2").val());
+});
+
+hangupButton2.click(function () {
+  rtc.hangUp();
 });

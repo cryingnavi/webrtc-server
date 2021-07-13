@@ -55,6 +55,17 @@ module.exports = {
           offer = room.getOfferUser();
           answer = room.getAnswerUser();
 
+          offer.send({
+            header: {
+              command: 'on_hangup'
+            }
+          });
+
+          answer.send({
+            header: {
+              command: 'on_hangup'
+            }
+          });
 
         } else if (data.header.command === "offer_sdp") {
           answer = room.getAnswerUser();

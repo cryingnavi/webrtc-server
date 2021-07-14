@@ -52,22 +52,35 @@ module.exports = {
             });
           }
         } else if (data.header.command === "hangup") {
+          if (!room) {
+            return;
+          }
+
           offer = room.getOfferUser();
           answer = room.getAnswerUser();
 
-          offer.send({
-            header: {
-              command: 'on_hangup'
-            }
-          });
+          if (offer) {
+            offer.send({
+              header: {
+                command: 'on_hangup'
+              }
+            });
+          }
 
-          answer.send({
-            header: {
-              command: 'on_hangup'
-            }
-          });
+          if (offer) {
+            answer.send({
+              header: {
+                command: 'on_hangup'
+              }
+            });
+          }
 
+          RoomMgr.deleteRoom(data.body.roomId);
         } else if (data.header.command === "offer_sdp") {
+          if (!room) {
+            return;
+          }
+
           answer = room.getAnswerUser();
           answer.send({
             header: {
@@ -78,6 +91,10 @@ module.exports = {
             }
           });
         } else if (data.header.command === "answer_sdp") {
+          if (!room) {
+            return;
+          }
+
           offer = room.getOfferUser();
           offer.send({
             header: {
@@ -88,6 +105,10 @@ module.exports = {
             }
           });
         } else if (data.header.command === "offer_candidate") {
+          if (!room) {
+            return;
+          }
+
           answer = room.getAnswerUser();
           answer.send({
             header: {
@@ -98,6 +119,10 @@ module.exports = {
             }
           });
         } else if (data.header.command === "answer_candidate") {
+          if (!room) {
+            return;
+          }
+
           offer = room.getOfferUser();
           offer.send({
             header: {

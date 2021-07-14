@@ -17,15 +17,6 @@ function Room (roomId) {
   _.getAnswerUser = function () {
     return this.answer;
   };
-  _.removeUser = function (u1) {
-    var users = [];
-    this.users = this.users.filter(function(u2){
-      if (u1 === u2) {
-        return false;
-      }
-      return true;
-    });
-  };
 }(Room.prototype));
 
 

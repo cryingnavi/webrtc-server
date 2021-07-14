@@ -702,6 +702,16 @@ var RTC = utils.Extend(utils.Event, {
 		this.fire("remoteStream", stream);
 	},
 	onHangUp: function () {
+		if (this.offer) {
+			this.offer.close();
+			this.offer = null;
+		}
+
+		if (this.answer) {
+			this.answer.close();
+			this.answer = null;
+		}
+		
 		this.fire("hangup");
 	}
 });

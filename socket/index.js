@@ -1,7 +1,7 @@
 const uuidv4 = require('uuid/v4');
 var WebSocketServer = require('websocket').server;
-var RoomMgr = require("../chat/RoomMgr")
-var UserMgr = require("../chat/UserMgr")
+var RoomMgr = require("../chat/RoomMgr.js")
+var UserMgr = require("../chat/UserMgr.js")
 
 var ws = null;
 

@@ -21,6 +21,8 @@ module.exports = {
 
       conn.on('message', function(message) {
         var data = JSON.parse(message.utf8Data);
+        console.log(data);
+
         var room = RoomMgr.getRoom(data.body.roomId);
         var offer = null;
         var answer = null;
@@ -138,6 +140,9 @@ module.exports = {
       conn.on('close', function(connection) {
 
       });
+
+
+      console.log('connect', uuid);
 
       conn.sendUTF(JSON.stringify({
         header: {

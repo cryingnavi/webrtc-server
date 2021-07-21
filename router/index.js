@@ -7,7 +7,7 @@ router.get("/", function (req, res) {
 router.get("/roomReady", function (req, res) {
 	res.json({
 		body: {
-			roomId: new Date().getTime()
+			roomId: new Date().getTime().toString()
 		}
 	});
 });

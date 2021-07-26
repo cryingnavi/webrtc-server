@@ -20,8 +20,10 @@ module.exports = {
       UserMgr.createUser(uuid, conn);
 
       conn.on('message', function(message) {
+        console.log('--------------');
         console.log(message);
-        console.log(message.utf8Data);
+        console.log('--------------');
+        
         var data = JSON.parse(message.utf8Data);
 
         var room = RoomMgr.getRoom(data.body.roomId);

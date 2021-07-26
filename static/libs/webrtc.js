@@ -447,7 +447,10 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				sdp: JSON.stringify(sdp)
+				sdp: {
+					type: sdp.type,
+					sdp: sdp.sdp
+				}
 			}
 		});
 
@@ -461,7 +464,10 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				sdp: JSON.stringify(sdp)
+				sdp: {
+					type: sdp.type,
+					sdp: sdp.sdp
+				}
 			}
 		});
 
@@ -475,7 +481,11 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				candidate: JSON.stringify(candidate)
+				candidate: {
+					candidate: candidate,
+					sdpMid: candidate.sdpMid,
+					sdpMLineIndex: candidate.sdpMLineIndex
+				}
 			}
 		});
 
@@ -489,7 +499,11 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				candidate: JSON.stringify(candidate)
+				candidate: {
+					candidate: candidate,
+					sdpMid: candidate.sdpMid,
+					sdpMLineIndex: candidate.sdpMLineIndex
+				}
 			}
 		});
 
@@ -512,16 +526,16 @@ var Channeling = utils.Extend(utils.Event, {
 				this.fire("onCallAnswer", body.offer);
 				break;
 			case "ON_OFFER_SDP":
-				this.fire("onOfferSdp", JSON.parse(body.sdp));
+				this.fire("onOfferSdp", body.sdp);
 				break;
 			case "ON_ANSWER_SDP":
-				this.fire("onAnswerSdp", JSON.parse(body.sdp));
+				this.fire("onAnswerSdp", body.sdp);
 				break;
 			case "ON_OFFER_CANDIDATE":
-				this.fire("onOfferCandidate", JSON.parse(body.candidate));
+				this.fire("onOfferCandidate", body.candidate);
 				break;
 			case "ON_ANSWER_CANDIDATE":
-				this.fire("onAnswerCandidate", JSON.parse(body.candidate));
+				this.fire("onAnswerCandidate", body.candidate);
 				break;
 			case "ON_HANGUP":
 				this.fire("onHangUp");

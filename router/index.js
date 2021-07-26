@@ -8,7 +8,7 @@ router.get("/roomReady", function (req, res) {
 	res.json({
 		body: {
 			//roomId: new Date().getTime().toString()
-			roomId: Math.random () * 100
+			roomId: Math.round(Math.random () * 100)
 		}
 	});
 });

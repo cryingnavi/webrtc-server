@@ -412,6 +412,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: { }
 		};
+		console.log(utils.apply(default_json, data));
 		return JSON.stringify(utils.apply(default_json, data));
 	},
 	call: function (roomId) {

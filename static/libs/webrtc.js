@@ -412,7 +412,6 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: { }
 		};
-		console.log(utils.apply(default_json, data));
 		return JSON.stringify(utils.apply(default_json, data));
 	},
 	call: function (roomId) {
@@ -448,10 +447,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				sdp: {
-					type: sdp.type,
-					sdp: sdp.sdp
-				}
+				sdp: JSON.stringify(sdp)
 			}
 		});
 
@@ -465,10 +461,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				sdp: {
-					type: sdp.type,
-					sdp: sdp.sdp
-				}
+				sdp: JSON.stringify(sdp)
 			}
 		});
 
@@ -482,11 +475,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				candidate: {
-					candidate: candidate,
-					sdpMid: candidate.sdpMid,
-					sdpMLineIndex: candidate.sdpMLineIndex
-				}
+				candidate: JSON.stringify(candidate)
 			}
 		});
 
@@ -500,11 +489,7 @@ var Channeling = utils.Extend(utils.Event, {
 			},
 			body: {
 				roomId: this.rtc.getRoomId(),
-				candidate: {
-					candidate: candidate,
-					sdpMid: candidate.sdpMid,
-					sdpMLineIndex: candidate.sdpMLineIndex
-				}
+				candidate: JSON.stringify(candidate)
 			}
 		});
 
@@ -527,16 +512,16 @@ var Channeling = utils.Extend(utils.Event, {
 				this.fire("onCallAnswer", body.offer);
 				break;
 			case "ON_OFFER_SDP":
-				this.fire("onOfferSdp", body.sdp);
+				this.fire("onOfferSdp", JSON.parse(body.sdp));
 				break;
 			case "ON_ANSWER_SDP":
-				this.fire("onAnswerSdp", body.sdp);
+				this.fire("onAnswerSdp", JSON.parse(body.sdp));
 				break;
 			case "ON_OFFER_CANDIDATE":
-				this.fire("onOfferCandidate", body.candidate);
+				this.fire("onOfferCandidate", JSON.parse(body.candidate));
 				break;
 			case "ON_ANSWER_CANDIDATE":
-				this.fire("onAnswerCandidate", body.candidate);
+				this.fire("onAnswerCandidate", JSON.parse(body.candidate));
 				break;
 			case "ON_HANGUP":
 				this.fire("onHangUp");

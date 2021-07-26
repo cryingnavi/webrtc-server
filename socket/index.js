@@ -124,9 +124,12 @@ module.exports = {
             }
           });
         } else if (data.header.command === "answer_candidate") {
+          console.log(1);
+          console.log(room);
           if (!room) {
             return;
           }
+          console.log(2);
 
           offer = room.getOfferUser();
           offer.send({

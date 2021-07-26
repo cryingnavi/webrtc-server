@@ -10,8 +10,10 @@ const localVideo = $('#localVideo');
 const remoteVideo = $('#remoteVideo');
 
 var rtc = new RTC({
-  url: 'http://localhost:11200',
-  ws: 'ws://localhost:11200',
+  //url: 'http://localhost:11200',
+  //ws: 'ws://localhost:11200',
+  url: 'https://test.studio-level9999.com',
+  ws: 'wss://test.studio-level9999.com',
   localMediaTarget: 'localVideo',
   remoteMediaTarget: 'remoteVideo',
   'iceServers': [

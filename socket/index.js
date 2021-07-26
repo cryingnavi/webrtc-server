@@ -125,13 +125,13 @@ module.exports = {
           });
         } else if (data.header.command === "answer_candidate") {
           console.log(1);
-          console.log(room);
           if (!room) {
             return;
           }
           console.log(2);
 
           offer = room.getOfferUser();
+          console.log(3);
           offer.send({
             header: {
               command: 'on_answer_candidate'
@@ -140,6 +140,14 @@ module.exports = {
               candidate: data.body.candidate
             }
           });
+          console.log(JSON.stringify({
+            header: {
+              command: 'on_answer_candidate'
+            },
+            body: {
+              candidate: data.body.candidate
+            }
+          }));
         }
       });
 

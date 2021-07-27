@@ -354,7 +354,11 @@ var Socket = utils.Extend(utils.Event, {
 		try{
 			this.socket.send(data);
 		}
-		catch(err){ }
+		catch(err){
+			console.log('websoket send error ==========');
+			console.log(err);
+			console.log('websoket send error ==========');
+		}
 	},
 	getReadyState: function(){
 		return this.socket.readyState;

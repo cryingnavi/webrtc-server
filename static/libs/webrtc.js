@@ -352,8 +352,9 @@ var Socket = utils.Extend(utils.Event, {
 	},
 	send: function(data){
 		try{
+			var _self = this;
 			window.setTimeout(function(){
-				this.socket.send(data);
+				_self.socket.send(data);
 			}, 1000);
 		}
 		catch(err){

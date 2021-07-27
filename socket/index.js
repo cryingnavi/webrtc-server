@@ -137,11 +137,25 @@ module.exports = {
               candidate: data.body.candidate
             }
           });
+
+          console.log(JSON.stringify({
+            header: {
+              command: 'on_answer_candidate'
+            },
+            body: {
+              candidate: data.body.candidate
+            }
+          }));
         }
       });
 
       conn.on('close', function(connection) {
         console.log('socket close');
+      });
+
+      conn.on('error', function(err) {
+        console.log('socket error');
+        console.log(err);
       });
 
 

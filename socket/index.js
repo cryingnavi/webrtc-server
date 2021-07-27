@@ -134,7 +134,7 @@ module.exports = {
               command: 'on_answer_candidate'
             },
             body: {
-              sdp: data.body.candidate
+              candidate: data.body.candidate
             }
           });
         }

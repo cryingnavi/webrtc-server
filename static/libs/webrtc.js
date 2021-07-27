@@ -771,7 +771,7 @@ var Peer = utils.Extend(utils.Event, {
 			console.log(e);
 			mediaStream.addTrack(e.track);
 			//this.fire("addRemoteStream", e.streams[0]);
-			this.fire("addRemoteStream", e.track);
+			this.fire("addRemoteStream", mediaStream);
 		}, this);
 
 		pc.onaddstream = utils.bind(function(e){

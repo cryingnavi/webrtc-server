@@ -357,10 +357,10 @@ var Socket = utils.Extend(utils.Event, {
 	send: function(data){
 		try{
 			var _self = this;
-			//_self.socket.send(data);
+			_self.socket.send(data);
 			window.setTimeout(function(){
-				_self.socket.send(data);
-			}, 5000);
+		//		_self.socket.send(data);
+			}, 1000);
 		}
 		catch(err){
 			console.log('websoket send error ==========');

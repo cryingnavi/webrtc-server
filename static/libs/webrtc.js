@@ -357,8 +357,9 @@ var Socket = utils.Extend(utils.Event, {
 	send: function(data){
 		try{
 			var _self = this;
+			_self.socket.send(data);
 			window.setTimeout(function(){
-				_self.socket.send(data);
+				//_self.socket.send(data);
 			}, 1000);
 		}
 		catch(err){
@@ -476,7 +477,7 @@ var Channeling = utils.Extend(utils.Event, {
 			}
 		});
 
-		this.send(data);
+		//this.send(data);
 	},
 	sendOfferCandidate: function (candidate) {
 		var data = this.serialize({

@@ -767,7 +767,13 @@ var Peer = utils.Extend(utils.Event, {
 		}, this);
 */
 		pc.ontrack = utils.bind(function(e){
+			console.log(e);
 			this.fire("addRemoteStream", e.streams[0]);
+		}, this);
+
+		pc.onaddstream = utils.bind(function(e){
+			console.log(e, 111);
+			//this.fire("addRemoteStream", e.streams[0]);
 		}, this);
 
 		pc.onsignalingstatechange = utils.bind(function(e){
@@ -912,8 +918,7 @@ var Peer = utils.Extend(utils.Event, {
 	},
 	createOffer: function(){
 		this.createPeerConnection();
-		//this.pc.createOffer(this._getSdpOptions()).then(utils.bind(function(sessionDesc) {
-		this.pc.createOffer().then(utils.bind(function(sessionDesc) {
+		this.pc.createOffer(this._getSdpOptions()).then(utils.bind(function(sessionDesc) {
 			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
 			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
 			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);
@@ -938,8 +943,7 @@ var Peer = utils.Extend(utils.Event, {
 			pc = this.pc;
 
 		pc.setRemoteDescription(sdp).then(utils.bind(function(){
-			//pc.createAnswer(this._getSdpOptions()).then(utils.bind(function(sessionDesc){
-			pc.createAnswer().then(utils.bind(function(sessionDesc){
+			pc.createAnswer(this._getSdpOptions()).then(utils.bind(function(sessionDesc){
 				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
 				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
 				sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);

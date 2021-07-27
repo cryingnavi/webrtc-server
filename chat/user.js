@@ -15,7 +15,9 @@ function User (token, ws) {
     try {
       this.ws.sendUTF(JSON.stringify(message));
     } catch (err) {
+      console.log('send message error =============');
       console.log(err);
+      console.log('send message error =============');
     }
     
   };

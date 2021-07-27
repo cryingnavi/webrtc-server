@@ -145,8 +145,9 @@ module.exports = {
       });
 
       conn.on('error', function(err) {
-        console.log('socket error');
+        console.log('socket error =============');
         console.log(err);
+        console.log('socket error =============');
       });
 
 

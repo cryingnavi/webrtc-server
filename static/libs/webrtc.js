@@ -356,11 +356,7 @@ var Socket = utils.Extend(utils.Event, {
 	},
 	send: function(data){
 		try{
-			var _self = this;
-			_self.socket.send(data);
-			window.setTimeout(function(){
-		//		_self.socket.send(data);
-			}, 1000);
+			this.socket.send(data);
 		}
 		catch(err){
 			console.log('websoket send error ==========');
@@ -752,6 +748,7 @@ var Peer = utils.Extend(utils.Event, {
 		this.connected = false;
 		this.oldStats = null;
 		this.statsReportTimer = null;
+		this.remoteMediaStream = new MediaStream();
 	},
 	setEvent: function(){
 		var pc = this.pc;
@@ -760,23 +757,12 @@ var Peer = utils.Extend(utils.Event, {
 				this.fire("sendCandidate", e.candidate);
 			}
 		}, this);
-/*
-		pc.onaddstream = utils.bind(function(e){
-			this.media = new Media(e.stream);
-			this.fire("addRemoteStream", this.id, this.uid, e.stream);
-		}, this);
-*/
-		var mediaStream = new MediaStream();
+
 		pc.ontrack = utils.bind(function(e){
 			console.log(e);
-			mediaStream.addTrack(e.track);
+			this.remoteMediaStream.addTrack(e.track);
 			//this.fire("addRemoteStream", e.streams[0]);
-			this.fire("addRemoteStream", mediaStream);
-		}, this);
-
-		pc.onaddstream = utils.bind(function(e){
-			console.log(e, 111);
-			//this.fire("addRemoteStream", e.streams[0]);
+			this.fire("addRemoteStream", this.remoteMediaStream);
 		}, this);
 
 		pc.onsignalingstatechange = utils.bind(function(e){

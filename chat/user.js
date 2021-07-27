@@ -9,7 +9,15 @@ function User (token, ws) {
     return this.token;
   };
   _.send = function (message) {
-    this.ws.sendUTF(JSON.stringify(message))
+    console.log('send message =============');
+    console.log(JSON.stringify(message));
+    console.log('send message =============');
+    try {
+      this.ws.sendUTF(JSON.stringify(message));
+    } catch (err) {
+      console.log(err);
+    }
+    
   };
 }(User.prototype));
 

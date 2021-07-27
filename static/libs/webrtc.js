@@ -338,15 +338,19 @@ var Socket = utils.Extend(utils.Event, {
 	},
 	setEvent: function(){
 		this.socket.onopen = utils.bind(function(e){
+			console.log('socket open', e);
 			this.fire("open", e);
 		}, this);
 		this.socket.onclose = utils.bind(function(e){
+			console.log('socket close', e);
 			this.fire("close", e);
 		}, this);
 		this.socket.onerror = utils.bind(function(e){
+			console.log('socket error', e);
 			this.fire("error", e);
 		}, this);
 		this.socket.onmessage = utils.bind(function(e){
+			console.log('socket message', e);
 			this.fire("message", e);
 		}, this);
 	},

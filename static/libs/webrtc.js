@@ -360,7 +360,7 @@ var Socket = utils.Extend(utils.Event, {
 			//_self.socket.send(data);
 			window.setTimeout(function(){
 				_self.socket.send(data);
-			}, 3000);
+			}, 5000);
 		}
 		catch(err){
 			console.log('websoket send error ==========');

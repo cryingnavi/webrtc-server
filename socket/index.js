@@ -132,9 +132,6 @@ module.exports = {
           offer.send({
             header: {
               command: 'on_answer_candidate'
-            },
-            body: {
-              
             }
           });
 

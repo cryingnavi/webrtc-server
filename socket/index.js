@@ -131,21 +131,12 @@ module.exports = {
           offer = room.getOfferUser();
           offer.send({
             header: {
-              command: 'on_answer111'
-            },
-            body: {
-              candidate: data.body.candidate
-            }
-          });
-
-          console.log(JSON.stringify({
-            header: {
               command: 'on_answer_candidate'
             },
             body: {
-              candidate: data.body.candidate
+              sdp: data.body.candidate
             }
-          }));
+          });
         }
       });
 

@@ -952,8 +952,10 @@ var Peer = utils.Extend(utils.Event, {
 	},
 	receiveAnwserSdp: function(sdp){
 		var pc = this.pc;
-		pc.setRemoteDescription(sdp).catch(function(){
-
+		pc.setRemoteDescription(sdp).catch(function(e){
+			console.log("setRemoteDescription error =====");
+			console.log(e);
+			console.log("setRemoteDescription error =====");
 		});
 	},
 	receiveCandidate: function(candidate){

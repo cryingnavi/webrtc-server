@@ -910,11 +910,11 @@ var Peer = utils.Extend(utils.Event, {
 	createOffer: function(){
 		this.createPeerConnection();
 		this.pc.createOffer(this._getSdpOptions()).then(utils.bind(function(sessionDesc) {
-			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
-			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
-			sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);
-			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
-			sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
+			//sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "audio", this.config.bandwidth.audio);
+			//sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "video", this.config.bandwidth.video);
+			//sessionDesc.sdp = this.replaceBandWidth(sessionDesc.sdp, "application", this.config.bandwidth.data);
+			//sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=audio(:?.*)?/, this.config.preferCodec.audio);
+			//sessionDesc.sdp = this.replacePreferCodec(sessionDesc.sdp, /m=video(:?.*)?/, this.config.preferCodec.video);
 
 			this.pc.setLocalDescription(sessionDesc).then(utils.bind(function () {
 				this.fire("sendOfferSdp", sessionDesc);

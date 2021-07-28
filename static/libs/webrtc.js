@@ -922,8 +922,6 @@ var Peer = utils.Extend(utils.Event, {
 
 		}, this), utils.bind(function(){
 			//에러
-
-			this.fire("");
 		}, this));
 	},
 	createAnswer: function(sdp){

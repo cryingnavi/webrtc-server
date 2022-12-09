@@ -9,7 +9,7 @@
     "body-parser": "^1.15.2",
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.0",
-    "express": "^4.14.0",
+    "express": "^4.17.3",
     "hogan-express": "^0.5.2",
     "hogan.js": "^3.0.2",
     "morgan": "^1.7.0",
